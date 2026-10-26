@@ -1,0 +1,3876 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aetheris — Océan Hyperréaliste au Tore Quantique (DoF & Caméra Rig)</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Three.js r128 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Google Fonts: Instrument Serif, Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-abyss: #030305;
+    }
+
+    body {
+      background-color: var(--bg-abyss);
+      color: #f8fafc;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    .font-serif-display {
+      font-family: 'Instrument Serif', Georgia, serif;
+    }
+
+    .font-mono-tech {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Fixed 3D WebGL Canvas */
+    #webgl-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+      cursor: crosshair;
+    }
+
+    #webgl-canvas.dragging-cam {
+      cursor: grabbing;
+    }
+
+    /* Atmospheric Horizon & Vignette Overlay */
+    #atmosphere-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      background:
+        radial-gradient(circle at 50% 42%, rgba(14, 165, 233, 0.13) 0%, rgba(3, 3, 5, 0.0) 55%),
+        radial-gradient(circle at 50% 50%, transparent 38%, rgba(3, 3, 5, 0.88) 100%);
+      transition: opacity 0.5s ease;
+    }
+
+    /* Glassmorphic UI Elements */
+    .glass-panel {
+      background: rgba(6, 11, 22, 0.68);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 14px 44px rgba(0, 0, 0, 0.72);
+    }
+
+    .glass-pill {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .btn-primary-glow {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 0 25px -5px rgba(56, 189, 248, 0.3), inset 0 0 12px rgba(255, 255, 255, 0.06);
+    }
+
+    .btn-primary-glow:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.6);
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 0 35px -2px rgba(249, 115, 22, 0.5), 0 0 22px rgba(56, 189, 248, 0.45);
+    }
+
+    .text-glow {
+      text-shadow: 0 6px 45px rgba(0, 0, 0, 0.95), 0 0 28px rgba(56, 189, 248, 0.16);
+    }
+
+    /* Scroll Sections */
+    .scroll-section {
+      min-height: 125vh;
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6rem 1.5rem;
+      pointer-events: none;
+    }
+
+    .interactive-card {
+      pointer-events: auto;
+    }
+
+    /* Custom Range Sliders */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(255, 255, 255, 0.14);
+      height: 4px;
+      border-radius: 999px;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #38bdf8;
+      box-shadow: 0 0 10px #38bdf8, 0 0 4px #ffffff;
+      cursor: pointer;
+      border: 2px solid #ffffff;
+      transition: transform 0.15s ease, background-color 0.2s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.22);
+      background: #f97316;
+      box-shadow: 0 0 12px #f97316;
+    }
+
+    /* Focus Target Reticle on 3D Click/Hover */
+    #focus-reticle {
+      position: fixed;
+      width: 44px;
+      height: 44px;
+      margin-left: -22px;
+      margin-top: -22px;
+      border: 1.5px solid rgba(52, 211, 153, 0.85);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 30;
+      opacity: 0;
+      transform: scale(1.4);
+      transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.5), inset 0 0 8px rgba(16, 185, 129, 0.3);
+    }
+    #focus-reticle.active {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    /* Native Modal Dialog Styling & Backdrop */
+    dialog#cta-modal {
+      border: none;
+      background: transparent;
+      padding: 0;
+      margin: auto;
+      max-width: 28rem;
+      width: calc(100% - 2rem);
+      color: inherit;
+    }
+    dialog#cta-modal::backdrop {
+      background-color: rgba(3, 3, 8, 0.78);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    /* Spatial 3D Card Hover */
+    .spatial-card {
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.35s ease, box-shadow 0.35s ease;
+      will-change: transform;
+    }
+    .spatial-card:hover {
+      transform: translateY(-4px) scale(1.005);
+      border-color: rgba(56, 189, 248, 0.38);
+      box-shadow: 0 22px 58px rgba(0, 0, 0, 0.82), 0 0 32px rgba(56, 189, 248, 0.14);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, ::before, ::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #030305;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(56, 189, 248, 0.3);
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(249, 115, 22, 0.7);
+    }
+  </style>
+</head>
+<body class="antialiased selection:bg-cyan-500/30 selection:text-cyan-100">
+
+  <!-- Fixed 3D WebGL Canvas -->
+  <canvas id="webgl-canvas"></canvas>
+  <div id="atmosphere-overlay"></div>
+
+  <!-- 3D Autofocus Reticle Indicator -->
+  <div id="focus-reticle" class="flex items-center justify-center">
+    <div class="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
+    <span id="reticle-dist" class="absolute -bottom-5 text-[9px] font-mono-tech text-emerald-300 bg-black/70 px-1.5 py-0.5 rounded">28.0m</span>
+  </div>
+
+  <!-- =========================================================================
+       TOP NAVIGATION BAR & TELEMETRY BADGES
+       ========================================================================= -->
+  <header class="fixed top-0 left-0 right-0 z-50 px-4 sm:px-8 py-4 flex items-center justify-between max-w-7xl mx-auto pointer-events-none">
+    <a href="#stage-0" class="flex items-center gap-2.5 group focus:outline-none interactive-card">
+      <div class="w-3.5 h-3.5 rounded-full bg-gradient-to-tr from-cyan-400 via-blue-500 to-orange-500 animate-pulse shadow-[0_0_14px_#38bdf8]"></div>
+      <span class="font-semibold tracking-widest text-xs uppercase text-white/90 group-hover:text-white transition">
+        AETHERIS<span class="text-cyan-400 font-mono-tech">.STUDIO</span>
+      </span>
+    </a>
+
+    <!-- Top Stage Quick Pills (Desktop) -->
+    <nav class="hidden lg:flex items-center gap-1.5 glass-pill px-2 py-1.5 rounded-full interactive-card">
+      <button onclick="jumpToStage(0)" class="stage-top-btn px-3.5 py-1 rounded-full text-xs font-medium transition text-white bg-white/15 cursor-pointer" data-stage="0">
+        <span class="text-cyan-400 font-mono-tech mr-1">01</span> <span data-i18n="nav_s1">Océan Réaliste</span>
+      </button>
+      <button onclick="jumpToStage(1)" class="stage-top-btn px-3.5 py-1 rounded-full text-xs font-medium transition text-white/60 hover:text-white cursor-pointer" data-stage="1">
+        <span class="text-sky-400 font-mono-tech mr-1">02</span> <span data-i18n="nav_s2">Calque Particulaire</span>
+      </button>
+      <button onclick="jumpToStage(2)" class="stage-top-btn px-3.5 py-1 rounded-full text-xs font-medium transition text-white/60 hover:text-white cursor-pointer" data-stage="2">
+        <span class="text-indigo-400 font-mono-tech mr-1">03</span> <span data-i18n="nav_s3">Tube de Particules</span>
+      </button>
+      <button onclick="jumpToStage(3)" class="stage-top-btn px-3.5 py-1 rounded-full text-xs font-medium transition text-white/60 hover:text-white cursor-pointer" data-stage="3">
+        <span class="text-orange-400 font-mono-tech mr-1">04</span> <span data-i18n="nav_s4">Tore Énergétique</span>
+      </button>
+    </nav>
+
+    <!-- Right Controls: Auto-Tour, FPS, Camera Badge, Optical DoF Badge, Scroll % & Language Toggle -->
+    <div class="flex items-center gap-2 interactive-card">
+      <button id="autotour-btn" onclick="toggleAutoTour()" class="hidden sm:flex items-center gap-1.5 glass-pill px-3 py-1.5 rounded-full text-[11px] font-mono-tech text-cyan-200 hover:border-cyan-400/50 transition cursor-pointer" title="Ciné-Tour Automatique">
+        <span id="autotour-dot" class="w-1.5 h-1.5 rounded-full bg-white/40"></span>
+        <span id="autotour-label" data-i18n="hud_autotour">Ciné-Tour</span>
+      </button>
+
+      <button onclick="switchStudioTab('camera')" class="hidden md:flex items-center gap-2 glass-pill px-3 py-1.5 rounded-full text-[11px] font-mono-tech text-amber-300/95 hover:border-amber-400/50 transition cursor-pointer" title="Hauteur & Angles Caméra">
+        <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+        <span id="hud-camera-summary">Alt +7.2m · -4°</span>
+      </button>
+
+      <button onclick="switchStudioTab('dof')" class="hidden sm:flex items-center gap-2 glass-pill px-3 py-1.5 rounded-full text-[11px] font-mono-tech text-emerald-300/95 hover:border-emerald-400/50 transition cursor-pointer" title="Distance focale & Ouverture">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="hud-optics-summary">27m · f/2.2</span>
+      </button>
+
+      <div class="hidden xl:flex items-center gap-1.5 glass-pill px-2.5 py-1.5 rounded-full text-[10px] font-mono-tech text-emerald-300/80" title="Framerate Temps Réel">
+        <span id="hud-fps">60 FPS</span>
+      </div>
+
+      <div class="hidden sm:flex items-center gap-1.5 glass-pill px-3 py-1.5 rounded-full text-[11px] font-mono-tech text-cyan-300/90">
+        <span id="hud-percent">00%</span>
+      </div>
+
+      <button id="lang-toggle" class="glass-pill px-3.5 py-1.5 rounded-full text-xs font-medium text-white/85 hover:text-white hover:border-white/30 transition flex items-center gap-1.5 cursor-pointer" title="Changer de langue / Switch Language">
+        <span id="lang-fr" class="text-white font-semibold">FR</span>
+        <span class="text-white/30">/</span>
+        <span id="lang-en" class="text-white/40">EN</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Left-Side Interactive 4-Stage Timeline HUD -->
+  <aside class="fixed left-4 sm:left-6 top-1/2 -translate-y-1/2 z-40 hidden xl:flex flex-col gap-3 interactive-card">
+    <div class="glass-panel rounded-2xl p-2.5 flex flex-col gap-2.5 border border-white/10">
+      <button onclick="jumpToStage(0)" class="side-step-btn group flex items-center justify-start gap-3 p-1.5 rounded-xl hover:bg-white/5 transition text-left cursor-pointer" data-step="0">
+        <span class="step-dot w-2.5 h-6 rounded-full bg-cyan-400 shadow-[0_0_12px_#38bdf8] transition-all duration-300"></span>
+        <span class="text-[11px] font-medium text-white transition" data-i18n="hud_step1">1. Océan Hyperréaliste</span>
+      </button>
+
+      <button onclick="jumpToStage(1)" class="side-step-btn group flex items-center justify-start gap-3 p-1.5 rounded-xl hover:bg-white/5 transition text-left cursor-pointer" data-step="1">
+        <span class="step-dot w-2.5 h-2.5 rounded-full bg-white/25 transition-all duration-300"></span>
+        <span class="text-[11px] font-medium text-white/45 group-hover:text-white transition" data-i18n="hud_step2">2. Calque Particulaire</span>
+      </button>
+
+      <button onclick="jumpToStage(2)" class="side-step-btn group flex items-center justify-start gap-3 p-1.5 rounded-xl hover:bg-white/5 transition text-left cursor-pointer" data-step="2">
+        <span class="step-dot w-2.5 h-2.5 rounded-full bg-white/25 transition-all duration-300"></span>
+        <span class="text-[11px] font-medium text-white/45 group-hover:text-white transition" data-i18n="hud_step3">3. Repliement en Tube</span>
+      </button>
+
+      <button onclick="jumpToStage(3)" class="side-step-btn group flex items-center justify-start gap-3 p-1.5 rounded-xl hover:bg-white/5 transition text-left cursor-pointer" data-step="3">
+        <span class="step-dot w-2.5 h-2.5 rounded-full bg-white/25 transition-all duration-300"></span>
+        <span class="text-[11px] font-medium text-white/45 group-hover:text-white transition" data-i18n="hud_step4">4. Tore de Particules</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- =========================================================================
+       BOTTOM-LEFT: GEOMETRY & WAVE LAB
+       ========================================================================= -->
+  <div class="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-40 interactive-card max-w-xs w-[calc(100vw-2rem)] sm:w-72">
+    <div class="glass-panel rounded-2xl p-3.5 border border-white/15 transition-all duration-300">
+      <div class="flex items-center justify-between mb-2.5">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+          <span class="text-[11px] font-mono-tech uppercase tracking-wider text-white/90" data-i18n="ctrl_title">Moteur Géométrique GLSL</span>
+        </div>
+        <button id="toggle-lab-btn" onclick="toggleLabPanel()" class="text-[11px] font-mono-tech text-cyan-400 hover:text-white transition cursor-pointer">
+          <span id="toggle-lab-label" data-i18n="ctrl_hide">Réduire</span>
+        </button>
+      </div>
+
+      <div id="lab-controls-body" class="space-y-2.5 text-xs">
+        <!-- Manual Morph Scrubber -->
+        <div>
+          <div class="flex justify-between text-[11px] text-white/70 mb-1">
+            <span data-i18n="ctrl_morph">Métamorphose</span>
+            <span id="morph-stage-label" class="font-mono-tech text-cyan-300">01. Océan Réaliste</span>
+          </div>
+          <input id="slider-morph" type="range" min="0" max="1" step="0.001" value="0" class="w-full" />
+        </div>
+
+        <!-- Wave Amplitude -->
+        <div>
+          <div class="flex justify-between text-[11px] text-white/70 mb-1">
+            <span data-i18n="ctrl_waves">Amplitude des Vagues</span>
+            <span id="val-wave" class="font-mono-tech text-white/90">1.00×</span>
+          </div>
+          <input id="slider-wave" type="range" min="0.2" max="2.0" step="0.05" value="1.0" class="w-full" />
+        </div>
+
+        <!-- Particle Glow Intensity -->
+        <div>
+          <div class="flex justify-between text-[11px] text-white/70 mb-1">
+            <span data-i18n="ctrl_glow">Luminescence</span>
+            <span id="val-glow" class="font-mono-tech text-white/90">1.25×</span>
+          </div>
+          <input id="slider-glow" type="range" min="0.5" max="2.5" step="0.05" value="1.25" class="w-full" />
+        </div>
+
+        <!-- Atmospheric Mood Palette Selector -->
+        <div class="pt-1 border-t border-white/10">
+          <div class="flex justify-between text-[10.5px] text-white/70 mb-1.5">
+            <span data-i18n="ctrl_mood">Atmosphère & Spectre</span>
+            <span id="mood-name-label" class="font-mono-tech text-cyan-300">Abyssal Gold</span>
+          </div>
+          <div class="grid grid-cols-4 gap-1.5">
+            <button onclick="setOceanMood(0)" class="mood-btn py-1 rounded-lg bg-cyan-500/25 border border-cyan-400/40 text-[10px] font-mono-tech text-cyan-200 transition cursor-pointer" data-mood="0">Abyss</button>
+            <button onclick="setOceanMood(1)" class="mood-btn py-1 rounded-lg bg-white/5 hover:bg-emerald-500/20 border border-white/10 text-[10px] font-mono-tech text-white/75 transition cursor-pointer" data-mood="1">Biolum</button>
+            <button onclick="setOceanMood(2)" class="mood-btn py-1 rounded-lg bg-white/5 hover:bg-orange-500/20 border border-white/10 text-[10px] font-mono-tech text-white/75 transition cursor-pointer" data-mood="2">Solar</button>
+            <button onclick="setOceanMood(3)" class="mood-btn py-1 rounded-lg bg-white/5 hover:bg-purple-500/20 border border-white/10 text-[10px] font-mono-tech text-white/75 transition cursor-pointer" data-mood="3">Nebula</button>
+          </div>
+        </div>
+
+        <!-- Quick Stage Buttons -->
+        <div class="pt-1 grid grid-cols-4 gap-1.5">
+          <button onclick="jumpToStage(0)" class="py-1 rounded-lg bg-white/5 hover:bg-cyan-500/20 border border-white/10 text-[10px] font-mono-tech text-white/80 transition cursor-pointer">S1</button>
+          <button onclick="jumpToStage(1)" class="py-1 rounded-lg bg-white/5 hover:bg-sky-500/20 border border-white/10 text-[10px] font-mono-tech text-white/80 transition cursor-pointer">S2</button>
+          <button onclick="jumpToStage(2)" class="py-1 rounded-lg bg-white/5 hover:bg-indigo-500/20 border border-white/10 text-[10px] font-mono-tech text-white/80 transition cursor-pointer">S3</button>
+          <button onclick="jumpToStage(3)" class="py-1 rounded-lg bg-white/5 hover:bg-orange-500/20 border border-white/10 text-[10px] font-mono-tech text-white/80 transition cursor-pointer">S4</button>
+        </div>
+        <div class="text-[9.5px] text-white/45 font-mono-tech text-center pt-0.5" data-i18n="ctrl_ripple_hint">
+          ✨ Clic 3D : Onde de choc + Autofocus · Touches 1–4 / Espace
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       BOTTOM-RIGHT: DUAL STUDIO HUD (TAB 1: CAMERA RIG | TAB 2: OPTICAL DOF)
+       ========================================================================= -->
+  <div class="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 interactive-card max-w-sm w-[calc(100vw-2rem)] sm:w-96">
+    <div class="glass-panel rounded-2xl p-4 border border-cyan-400/25 transition-all duration-300 shadow-[0_14px_50px_rgba(0,0,0,0.78)]">
+
+      <!-- Top Studio Switcher Tabs + Collapse Button -->
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <div class="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10 flex-1">
+          <button id="tab-btn-camera" onclick="switchStudioTab('camera')" class="flex-1 py-1.5 px-2 rounded-lg text-[10.5px] font-mono-tech uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-1.5 bg-amber-500/25 text-amber-200 border border-amber-400/35">
+            <span class="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]"></span>
+            <span data-i18n="tab_camera">Caméra & Angles</span>
+          </button>
+          <button id="tab-btn-dof" onclick="switchStudioTab('dof')" class="flex-1 py-1.5 px-2 rounded-lg text-[10.5px] font-mono-tech uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-1.5 text-white/60 hover:text-white">
+            <span id="dof-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]"></span>
+            <span data-i18n="tab_dof">Profondeur de Champ (DoF)</span>
+          </button>
+        </div>
+
+        <button onclick="toggleStudioPanel()" class="px-2 py-1 text-[11px] font-mono-tech text-cyan-400 hover:text-white transition cursor-pointer">
+          <span id="toggle-studio-label" data-i18n="ctrl_hide">Réduire</span>
+        </button>
+      </div>
+
+      <!-- STUDIO BODY WRAPPER -->
+      <div id="studio-controls-body">
+
+        <!-- ===================================================================
+             TAB PANEL 1: CAMERA RIG CONTROLS (HEIGHT, PITCH, YAW, ROLL, FOV)
+             =================================================================== -->
+        <div id="panel-camera-rig" class="space-y-2.5 text-xs">
+          <!-- Camera Mode Selector + Gyroscope Artificial Horizon -->
+          <div class="flex items-center gap-3 bg-black/30 p-2 rounded-xl border border-white/10">
+            <!-- Artificial Horizon Gyroscope SVG -->
+            <div class="relative w-14 h-14 rounded-full bg-slate-950 border border-amber-400/40 overflow-hidden flex-shrink-0 flex items-center justify-center shadow-inner" title="Horizon Artificiel (Pitch & Roll)">
+              <div id="gyro-disc" class="w-20 h-20 absolute transition-transform duration-75" style="background: linear-gradient(180deg, rgba(14,165,233,0.28) 0%, rgba(14,165,233,0.28) 50%, rgba(245,158,11,0.25) 50%, rgba(245,158,11,0.25) 100%);">
+                <div class="w-full h-[1px] bg-amber-300/80 absolute top-1/2 left-0"></div>
+                <div class="w-6 h-[1px] bg-white/40 absolute top-[35%] left-1/2 -translate-x-1/2"></div>
+                <div class="w-6 h-[1px] bg-white/40 absolute top-[65%] left-1/2 -translate-x-1/2"></div>
+              </div>
+              <!-- Fixed Aircraft Reference Reticle -->
+              <div class="relative z-10 flex items-center justify-center pointer-events-none">
+                <div class="w-3 h-[1.5px] bg-emerald-400"></div>
+                <div class="w-1.5 h-1.5 rounded-full border border-emerald-400 mx-0.5"></div>
+                <div class="w-3 h-[1.5px] bg-emerald-400"></div>
+              </div>
+              <span id="gyro-readout" class="absolute bottom-0.5 text-[8px] font-mono-tech text-amber-200/90">0°</span>
+            </div>
+
+            <!-- Camera Tracking Mode -->
+            <div class="flex-1 space-y-1.5">
+              <div class="flex items-center justify-between text-[10px] text-white/60 uppercase tracking-wider">
+                <span data-i18n="cam_mode_label">Pilotage Caméra</span>
+                <button onclick="resetCameraRig()" class="text-[10px] font-mono-tech text-amber-300 hover:text-white underline cursor-pointer" data-i18n="cam_reset">Reset</button>
+              </div>
+              <div class="grid grid-cols-3 gap-1">
+                <button onclick="setCameraMode('combined')" id="cam-mode-combined" class="py-1 px-1.5 rounded-lg text-[10px] font-medium transition cursor-pointer bg-amber-500/25 text-amber-200 border border-amber-400/35" data-i18n="cam_mode_comb">
+                  Scroll+Offset
+                </button>
+                <button onclick="setCameraMode('manual')" id="cam-mode-manual" class="py-1 px-1.5 rounded-lg text-[10px] font-medium transition cursor-pointer text-white/60 hover:text-white bg-white/5" data-i18n="cam_mode_man">
+                  Libre 100%
+                </button>
+                <button onclick="setCameraMode('auto')" id="cam-mode-auto" class="py-1 px-1.5 rounded-lg text-[10px] font-medium transition cursor-pointer text-white/60 hover:text-white bg-white/5" data-i18n="cam_mode_auto">
+                  Auto Scroll
+                </button>
+              </div>
+              <div class="text-[9.5px] text-white/45 font-mono-tech leading-tight" data-i18n="cam_mouse_hint">
+                💡 Shift+Glisser ou Clic-Droit : Angles · Alt+Glisser : Hauteur
+              </div>
+            </div>
+          </div>
+
+          <!-- 1. Camera Height / Altitude Slider (-5m to +45m) -->
+          <div>
+            <div class="flex justify-between text-[11px] text-white/85 mb-1">
+              <span data-i18n="cam_height">Hauteur Caméra (Altitude Y)</span>
+              <span id="val-cam-height" class="font-mono-tech text-amber-300 font-medium">+7.2 m</span>
+            </div>
+            <input id="slider-cam-height" type="range" min="-5.0" max="45.0" step="0.2" value="7.2" class="w-full" />
+          </div>
+
+          <!-- 2. Pitch Angle Slider (Inclinaison verticale: -85° to +45°) -->
+          <div>
+            <div class="flex justify-between text-[11px] text-white/85 mb-1">
+              <span data-i18n="cam_pitch">Inclinaison Verticale (Pitch)</span>
+              <span id="val-cam-pitch" class="font-mono-tech text-cyan-300 font-medium">-8.0°</span>
+            </div>
+            <input id="slider-cam-pitch" type="range" min="-85" max="45" step="0.5" value="-8" class="w-full" />
+          </div>
+
+          <!-- 3. Yaw & Roll Angles (2 columns) -->
+          <div class="grid grid-cols-2 gap-2.5">
+            <div>
+              <div class="flex justify-between text-[10.5px] text-white/80 mb-1">
+                <span data-i18n="cam_yaw">Panoramique (Yaw)</span>
+                <span id="val-cam-yaw" class="font-mono-tech text-sky-300">0°</span>
+              </div>
+              <input id="slider-cam-yaw" type="range" min="-180" max="180" step="1" value="0" class="w-full" />
+            </div>
+
+            <div>
+              <div class="flex justify-between text-[10.5px] text-white/80 mb-1">
+                <span data-i18n="cam_roll">Roulis (Roll)</span>
+                <span id="val-cam-roll" class="font-mono-tech text-indigo-300">0°</span>
+              </div>
+              <input id="slider-cam-roll" type="range" min="-45" max="45" step="0.5" value="0" class="w-full" />
+            </div>
+          </div>
+
+          <!-- 4. Focal Length / Field of View (24mm, 35mm, 50mm, 85mm) -->
+          <div class="pt-1 border-t border-white/10">
+            <div class="flex items-center justify-between text-[10.5px] text-white/75 mb-1.5">
+              <span data-i18n="cam_fov_label">Focale Objectif (FOV)</span>
+              <span id="val-cam-fov" class="font-mono-tech text-amber-200">35mm (58°)</span>
+            </div>
+            <div class="grid grid-cols-4 gap-1.5">
+              <button onclick="setCameraLens(24, 78)" class="lens-btn py-1 rounded-lg bg-white/5 hover:bg-amber-500/20 border border-white/10 text-[10px] font-mono-tech text-white/80 transition cursor-pointer" data-mm="24">24mm</button>
+              <button onclick="setCameraLens(35, 58)" class="lens-btn py-1 rounded-lg bg-amber-500/25 border border-amber-400/40 text-[10px] font-mono-tech text-amber-200 transition cursor-pointer" data-mm="35">35mm</button>
+              <button onclick="setCameraLens(50, 42)" class="lens-btn py-1 rounded-lg bg-white/5 hover:bg-amber-500/20 border border-white/10 text-[10px] font-mono-tech text-white/80 transition cursor-pointer" data-mm="50">50mm</button>
+              <button onclick="setCameraLens(85, 26)" class="lens-btn py-1 rounded-lg bg-white/5 hover:bg-amber-500/20 border border-white/10 text-[10px] font-mono-tech text-white/80 transition cursor-pointer" data-mm="85">85mm</button>
+            </div>
+          </div>
+
+          <!-- 5. Cinematic Camera Angle Presets -->
+          <div class="pt-1">
+            <div class="text-[10px] text-white/50 uppercase tracking-wider mb-1.5" data-i18n="cam_presets">Cadrages Cinématiques</div>
+            <div class="grid grid-cols-3 gap-1.5">
+              <button onclick="applyCameraPreset('walo')" class="py-1.5 px-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-400/40 text-[10px] font-mono-tech text-cyan-200 transition cursor-pointer text-center" data-i18n="preset_walo">
+                ⚓ OPV 58 WALO
+              </button>
+              <button onclick="applyCameraPreset('grazing')" class="py-1.5 px-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/20 border border-white/10 text-[10px] font-mono-tech text-white/85 transition cursor-pointer text-center" data-i18n="preset_grazing">
+                Ras de l'eau
+              </button>
+              <button onclick="applyCameraPreset('horizon')" class="py-1.5 px-1.5 rounded-lg bg-white/5 hover:bg-sky-500/20 border border-white/10 text-[10px] font-mono-tech text-white/85 transition cursor-pointer text-center" data-i18n="preset_horizon">
+                Horizon
+              </button>
+              <button onclick="applyCameraPreset('high')" class="py-1.5 px-1.5 rounded-lg bg-white/5 hover:bg-indigo-500/20 border border-white/10 text-[10px] font-mono-tech text-white/85 transition cursor-pointer text-center" data-i18n="preset_high">
+                Plongée
+              </button>
+              <button onclick="applyCameraPreset('zenith')" class="py-1.5 px-1.5 rounded-lg bg-white/5 hover:bg-amber-500/20 border border-white/10 text-[10px] font-mono-tech text-white/85 transition cursor-pointer text-center" data-i18n="preset_zenith">
+                Vue Zénithale
+              </button>
+              <button onclick="applyCameraPreset('core')" class="py-1.5 px-1.5 rounded-lg bg-white/5 hover:bg-orange-500/20 border border-white/10 text-[10px] font-mono-tech text-white/85 transition cursor-pointer text-center" data-i18n="preset_core">
+                Cœur Tube/Tore
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================================================================
+             TAB PANEL 2: OPTICAL DEPTH OF FIELD (DOF / BOKEH)
+             =================================================================== -->
+        <div id="panel-optical-dof" class="space-y-3 text-xs hidden">
+          <!-- Master DoF Enable Row -->
+          <div class="flex items-center justify-between bg-black/30 px-3 py-2 rounded-xl border border-white/10">
+            <span class="text-[11px] text-white/85 font-medium" data-i18n="dof_master_label">Moteur Bokeh Cercle de Confusion</span>
+            <button id="dof-master-toggle" onclick="toggleDoFEnabled()" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono-tech uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 transition cursor-pointer">
+              ON
+            </button>
+          </div>
+
+          <!-- Autofocus Mode Selector (Manuel / Curseur 3D / Auto-Scène) -->
+          <div>
+            <div class="flex justify-between items-center text-[10px] text-white/60 uppercase tracking-wider mb-1.5">
+              <span data-i18n="dof_mode_label">Mode Autofocus</span>
+              <span id="dof-mode-hint" class="text-emerald-300 font-mono-tech text-[10px]" data-i18n="dof_hint_click">Clic/Survol 3D actif</span>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5 bg-black/30 p-1 rounded-xl border border-white/10">
+              <button onclick="setFocusMode('manual')" id="mode-btn-manual" class="py-1.5 px-2 rounded-lg text-[11px] font-medium transition cursor-pointer text-white/60 hover:text-white" data-i18n="dof_mode_manual">
+                Manuel
+              </button>
+              <button onclick="setFocusMode('pointer')" id="mode-btn-pointer" class="py-1.5 px-2 rounded-lg text-[11px] font-medium transition cursor-pointer bg-cyan-500/25 text-cyan-200 border border-cyan-400/30" data-i18n="dof_mode_pointer">
+                Curseur 3D
+              </button>
+              <button onclick="setFocusMode('auto')" id="mode-btn-auto" class="py-1.5 px-2 rounded-lg text-[11px] font-medium transition cursor-pointer text-white/60 hover:text-white" data-i18n="dof_mode_auto">
+                Auto-Scène
+              </button>
+            </div>
+          </div>
+
+          <!-- 1. Focus Distance Slider (6m to 85m) -->
+          <div>
+            <div class="flex justify-between text-[11px] text-white/80 mb-1">
+              <span data-i18n="dof_focus_dist">Distance de Mise au Point</span>
+              <span id="val-focus-dist" class="font-mono-tech text-emerald-300 font-medium">27.0 m</span>
+            </div>
+            <input id="slider-focus-dist" type="range" min="6" max="85" step="0.5" value="27.0" class="w-full" />
+          </div>
+
+          <!-- 2. Aperture / Bokeh Intensity Slider (f/1.2 to f/16) -->
+          <div>
+            <div class="flex justify-between text-[11px] text-white/80 mb-1">
+              <span data-i18n="dof_aperture">Ouverture (Intensité Bokeh)</span>
+              <span id="val-aperture" class="font-mono-tech text-cyan-300 font-medium">f/2.2</span>
+            </div>
+            <input id="slider-aperture" type="range" min="1.2" max="16.0" step="0.1" value="2.2" class="w-full" />
+          </div>
+
+          <!-- 3. Focal Range / Depth Zone Slider (0.8m to 32m) -->
+          <div>
+            <div class="flex justify-between text-[11px] text-white/80 mb-1">
+              <span data-i18n="dof_focal_range">Plage de Netteté (Zone)</span>
+              <span id="val-focal-range" class="font-mono-tech text-white/90">± 4.5 m</span>
+            </div>
+            <input id="slider-focal-range" type="range" min="0.8" max="32.0" step="0.2" value="4.5" class="w-full" />
+          </div>
+
+          <!-- Focus Peaking Toggle (Laser Highlight on Focal Plane) -->
+          <div class="flex items-center justify-between pt-1 border-t border-white/10">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span class="text-[11px] text-white/80" data-i18n="dof_peaking">Focus Peaking (Laser Plan Focal)</span>
+            </div>
+            <button id="peaking-toggle-btn" onclick="toggleFocusPeaking()" class="px-2.5 py-1 rounded-lg text-[10px] font-mono-tech uppercase bg-white/5 hover:bg-white/10 text-white/60 border border-white/15 transition cursor-pointer">
+              AUTO
+            </button>
+          </div>
+
+          <!-- Optical F-Stop Presets (f/1.2, f/2.0, f/4.0, f/8.0, f/16) -->
+          <div class="pt-1">
+            <div class="text-[10px] text-white/50 uppercase tracking-wider mb-1.5" data-i18n="dof_presets">Diaphragmes Optiques</div>
+            <div class="grid grid-cols-5 gap-1">
+              <button onclick="applyOpticalPreset(1.2, 1.6)" class="py-1.5 rounded-lg bg-white/5 hover:bg-orange-500/20 border border-white/10 text-[10px] font-mono-tech text-white/85 transition cursor-pointer text-center">
+                f/1.2
+              </button>
+              <button onclick="applyOpticalPreset(2.0, 3.8)" class="py-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/20 border border-white/10 text-[10px] font-mono-tech text-white/85 transition cursor-pointer text-center">
+                f/2.0
+              </button>
+              <button onclick="applyOpticalPreset(4.0, 7.5)" class="py-1.5 rounded-lg bg-white/5 hover:bg-sky-500/20 border border-white/10 text-[10px] font-mono-tech text-white/85 transition cursor-pointer text-center">
+                f/4.0
+              </button>
+              <button onclick="applyOpticalPreset(8.0, 15.0)" class="py-1.5 rounded-lg bg-white/5 hover:bg-indigo-500/20 border border-white/10 text-[10px] font-mono-tech text-white/85 transition cursor-pointer text-center">
+                f/8.0
+              </button>
+              <button onclick="applyOpticalPreset(16.0, 28.0)" class="py-1.5 rounded-lg bg-white/5 hover:bg-emerald-500/20 border border-white/10 text-[10px] font-mono-tech text-white/85 transition cursor-pointer text-center">
+                f/16
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       SCROLLABLE STORYTELLING SECTIONS (4 STAGES)
+       ========================================================================= -->
+  <main id="scroll-container" class="relative z-10">
+
+    <!-- STAGE 1 (0% - 25%): HYPER-REALISTIC OCEAN OF WAVES -->
+    <section id="stage-0" class="scroll-section">
+      <div class="max-w-3xl mx-auto text-center flex flex-col items-center interactive-card -mt-16">
+        <div class="glass-pill px-4 py-1.5 rounded-full inline-flex items-center gap-2.5 mb-6">
+          <span class="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_10px_#22d3ee]"></span>
+          <span class="text-xs font-light tracking-wide text-cyan-100/90" data-i18n="s1_badge">
+            Étape 01 — Océan de Vagues Hyperréaliste
+          </span>
+        </div>
+
+        <h1 class="font-serif-display text-5xl sm:text-7xl md:text-[5.25rem] leading-[1.03] tracking-tight text-white text-glow mb-6" data-i18n="s1_title">
+          La naissance du mouvement à la surface de l'abysse
+        </h1>
+
+        <p class="text-white/75 text-sm sm:text-base md:text-lg font-light max-w-xl mx-auto leading-relaxed mb-9" data-i18n="s1_desc">
+          Un océan physique intégralement calculé par shaders GLSL : 5 houles directionnelles de Gerstner, diffusion sous-marine turquoise, reflets de Fresnel, profondeur de champ optique et contrôle intégral de la caméra.
+        </p>
+
+        <div class="flex flex-wrap items-center justify-center gap-4">
+          <button onclick="jumpToStage(1)" class="btn-primary-glow px-6 py-3 rounded-full text-xs sm:text-sm font-normal text-white flex items-center gap-3 group cursor-pointer">
+            <span data-i18n="s1_cta1">Calquer l'océan de particules</span>
+            <span class="w-6 h-6 rounded-full border border-white/30 flex items-center justify-center group-hover:translate-y-0.5 bg-white/10 transition">
+              <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </span>
+          </button>
+
+          <button onclick="openModal()" class="glass-pill hover:bg-white/10 text-xs sm:text-sm font-light text-white/85 hover:text-white transition px-5 py-3 rounded-full cursor-pointer" data-i18n="s1_cta2">
+            Découvrir l'architecture
+          </button>
+        </div>
+      </div>
+
+      <!-- Scroll Prompt -->
+      <div class="absolute bottom-8 left-1/2 -translate-x-1/2 hidden sm:flex flex-col items-center gap-2 opacity-70 pointer-events-none">
+        <span class="text-[10px] font-mono-tech uppercase tracking-[0.25em] text-cyan-200/80" data-i18n="scroll_prompt">
+          Défiler pour matérialiser les particules · Shift+Glisser pour orienter la caméra
+        </span>
+        <div class="w-[1px] h-9 bg-gradient-to-b from-cyan-400 to-transparent"></div>
+      </div>
+    </section>
+
+    <!-- STAGE 2 (25% - 50%): PARTICLE OCEAN OVERLAY & FUSION -->
+    <section id="stage-1" class="scroll-section">
+      <div class="w-full max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-8 items-center interactive-card">
+        <div class="md:col-span-6 glass-panel spatial-card p-7 sm:p-9 rounded-3xl border border-cyan-500/20 text-left space-y-5">
+          <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-cyan-500/10 border border-cyan-400/30">
+            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
+            <span class="text-[11px] font-mono-tech uppercase tracking-wider text-cyan-300" data-i18n="s2_badge">
+              Étape 02 — Fusion & Calque Particulaire
+            </span>
+          </div>
+
+          <h2 class="font-serif-display text-4xl sm:text-6xl text-white text-glow leading-[1.06]" data-i18n="s2_title">
+            L'océan de particules épouse chaque vague
+          </h2>
+
+          <p class="text-white/75 text-sm sm:text-base font-light leading-relaxed" data-i18n="s2_desc">
+            48 400 particules luminescentes se verrouillent mathématiquement sur la géométrie exacte des vagues de Gerstner. Ajustez la hauteur de caméra au ras des crêtes ou en plongée zénithale tout en sculptant le bokeh optique.
+          </p>
+
+          <div class="grid grid-cols-2 gap-4 pt-2 border-t border-white/10">
+            <div>
+              <div class="font-serif-display text-3xl sm:text-4xl text-cyan-400">78 400</div>
+              <div class="text-[11px] text-white/60 font-light" data-i18n="s2_stat1">Capteurs lumineux avec Bokeh GPU</div>
+            </div>
+            <div>
+              <div class="font-serif-display text-3xl sm:text-4xl text-orange-400">6 DDL</div>
+              <div class="text-[11px] text-white/60 font-light" data-i18n="s2_stat2">Liberté Caméra & Optique Temps Réel</div>
+            </div>
+          </div>
+
+          <div class="pt-2">
+            <button onclick="jumpToStage(2)" class="btn-primary-glow px-5 py-2.5 rounded-full text-xs sm:text-sm text-white inline-flex items-center gap-2.5 cursor-pointer">
+              <span data-i18n="s2_cta">Initier le repliement tubulaire →</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="md:col-span-6"></div>
+      </div>
+    </section>
+
+    <!-- STAGE 3 (50% - 75%): FOLDING INTO A PARTICLE TUBE -->
+    <section id="stage-2" class="scroll-section">
+      <div class="w-full max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-8 items-center interactive-card">
+        <div class="md:col-span-6"></div>
+
+        <div class="md:col-span-6 glass-panel spatial-card p-7 sm:p-9 rounded-3xl border border-indigo-500/25 text-left space-y-5">
+          <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-indigo-500/15 border border-indigo-400/30">
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
+            <span class="text-[11px] font-mono-tech uppercase tracking-wider text-indigo-300" data-i18n="s3_badge">
+              Étape 03 — Repliement en Tube de Particules
+            </span>
+          </div>
+
+          <h2 class="font-serif-display text-4xl sm:text-6xl text-white text-glow leading-[1.06]" data-i18n="s3_title">
+            La nappe d'ondes se replie en tunnel énergétique
+          </h2>
+
+          <p class="text-white/75 text-sm sm:text-base font-light leading-relaxed" data-i18n="s3_desc">
+            Les rives gauche et droite de l'océan particulaire s'élèvent dans l'espace 3D et s'enroulent à 360° pour fusionner au zénith. Les vagues océaniques deviennent des pulsations hélicoïdales propulsées le long d'un cylindre quantique.
+          </p>
+
+          <div class="flex flex-wrap items-center gap-4 pt-2">
+            <button onclick="jumpToStage(3)" class="btn-primary-glow px-6 py-2.5 rounded-full text-xs sm:text-sm text-white inline-flex items-center gap-2.5 cursor-pointer">
+              <span data-i18n="s3_cta">Courber le tube en Tore →</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STAGE 4 (75% - 100%): CLOSING INTO A PARTICLE TORUS -->
+    <section id="stage-3" class="scroll-section">
+      <div class="max-w-3xl mx-auto text-center flex flex-col items-center interactive-card">
+        <div class="glass-pill px-4 py-1.5 rounded-full inline-flex items-center gap-2 mb-6 border-orange-400/30">
+          <span class="w-2 h-2 rounded-full bg-orange-400 shadow-[0_0_10px_#fb923c] animate-ping"></span>
+          <span class="text-xs font-light tracking-wide text-orange-200" data-i18n="s4_badge">
+            Étape 04 — Singularité Torique Complète
+          </span>
+        </div>
+
+        <h2 class="font-serif-display text-5xl sm:text-7xl md:text-[5.2rem] leading-[1.04] text-white text-glow mb-6" data-i18n="s4_title">
+          Le Tore de Particules : l'énergie en boucle infinie
+        </h2>
+
+        <p class="text-white/75 text-sm sm:text-base md:text-lg font-light max-w-xl mx-auto leading-relaxed mb-9" data-i18n="s4_desc">
+          L'axe longitudinal du tube s'incurve sur lui-même jusqu'à sceller ses deux extrémités. L'océan originel est désormais un tore auto-entretenu où chaque vague circule dans un vortex poloïdal et toroïdal perpétuel.
+        </p>
+
+        <div class="flex flex-wrap items-center justify-center gap-4">
+          <button onclick="openModal()" class="btn-primary-glow px-7 py-3.5 rounded-full text-xs sm:text-sm font-medium text-white flex items-center gap-3 group cursor-pointer">
+            <span data-i18n="s4_cta1">Déployer cette expérience</span>
+            <span class="w-6 h-6 rounded-full border border-white/30 flex items-center justify-center group-hover:translate-x-0.5 bg-white/10 transition">
+              <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </span>
+          </button>
+
+          <button onclick="jumpToStage(0)" class="glass-pill hover:bg-white/10 text-xs sm:text-sm font-light text-white/80 hover:text-white transition px-5 py-3.5 rounded-full cursor-pointer" data-i18n="s4_cta2">
+            ↺ Rejouer depuis l'Océan
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Access / Architecture Modal (Native Top-Layer Dialog with Light-Dismiss) -->
+  <dialog id="cta-modal" closedby="any" aria-labelledby="modal-title-heading">
+    <div class="glass-panel rounded-3xl p-8 border border-white/20 relative text-center shadow-2xl interactive-card">
+      <button type="button" onclick="closeModal()" aria-label="Fermer" class="absolute top-5 right-5 text-white/50 hover:text-white transition cursor-pointer">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+
+      <div class="w-11 h-11 rounded-full bg-gradient-to-tr from-cyan-400 via-indigo-500 to-orange-500 mx-auto mb-5 flex items-center justify-center shadow-[0_0_30px_rgba(56,189,248,0.5)]">
+        <span class="w-3.5 h-3.5 rounded-full bg-white"></span>
+      </div>
+
+      <h3 id="modal-title-heading" class="font-serif-display text-3xl text-white mb-2" data-i18n="modal_title">Accéder au Studio Aetheris</h3>
+      <p class="text-xs sm:text-sm text-white/70 font-light mb-6" data-i18n="modal_desc">
+        Recevez nos shaders GLSL sur mesure (Océan Gerstner → Calque Particulaire → Tube → Tore + Bokeh Optique & Rig Caméra) prêts pour Three.js.
+      </p>
+
+      <form onsubmit="handleFormSubmit(event)" class="space-y-3 text-left">
+        <input type="email" required placeholder="vous@entreprise.com" class="w-full bg-white/5 border border-white/15 rounded-full px-5 py-3 text-sm text-white placeholder-white/35 focus:outline-none focus:border-cyan-400 transition" />
+        <button type="submit" class="w-full btn-primary-glow py-3 rounded-full text-sm font-medium text-white cursor-pointer" data-i18n="modal_btn">
+          Obtenir l'accès immédiat →
+        </button>
+      </form>
+      <p id="form-feedback" class="text-xs text-emerald-400 mt-4 hidden" data-i18n="modal_success">
+        ✨ Lien d'accès envoyé avec succès !
+      </p>
+    </div>
+  </dialog>
+
+  <!-- =========================================================================
+       GLSL SHADERS & THREE.JS METAMORPHOSIS + DOF + CAMERA RIG ENGINE
+       ========================================================================= -->
+  <script>
+    /* -------------------------------------------------------------------------
+       1. BILINGUAL TRANSLATION SYSTEM (FR DEFAULT / EN)
+       ------------------------------------------------------------------------- */
+    const translations = {
+      fr: {
+        nav_s1: "Océan Réaliste",
+        nav_s2: "Calque Particulaire",
+        nav_s3: "Tube de Particules",
+        nav_s4: "Tore Énergétique",
+        hud_step1: "1. Océan Hyperréaliste",
+        hud_step2: "2. Calque Particulaire",
+        hud_step3: "3. Repliement en Tube",
+        hud_step4: "4. Tore de Particules",
+        ctrl_title: "Moteur Géométrique GLSL",
+        ctrl_hide: "Réduire",
+        ctrl_show: "Ouvrir",
+        ctrl_morph: "Métamorphose",
+        ctrl_waves: "Amplitude des Vagues",
+        ctrl_glow: "Luminescence",
+        ctrl_mood: "Atmosphère & Spectre",
+        ctrl_ripple_hint: "✨ Clic 3D : Onde de choc + Autofocus · Touches 1–4 / Espace",
+        hud_autotour: "Ciné-Tour",
+        tab_camera: "Caméra & Angles",
+        tab_dof: "Profondeur de Champ (DoF)",
+        cam_mode_label: "Pilotage Caméra",
+        cam_reset: "Reset",
+        cam_mode_comb: "Scroll+Offset",
+        cam_mode_man: "Libre 100%",
+        cam_mode_auto: "Auto Scroll",
+        cam_mouse_hint: "💡 Shift+Glisser ou Clic-Droit : Angles · Alt+Glisser : Hauteur",
+        cam_height: "Hauteur Caméra (Altitude Y)",
+        cam_pitch: "Inclinaison Verticale (Pitch)",
+        cam_yaw: "Panoramique (Yaw)",
+        cam_roll: "Roulis (Roll)",
+        cam_fov_label: "Focale Objectif (FOV)",
+        cam_presets: "Cadrages Cinématiques",
+        preset_walo: "⚓ OPV 58 WALO",
+        preset_grazing: "Ras de l'eau",
+        preset_horizon: "Horizon",
+        preset_high: "Plongée",
+        preset_zenith: "Vue Zénithale",
+        preset_dutch: "Dévers Cinéma",
+        preset_core: "Cœur Tube/Tore",
+        dof_master_label: "Moteur Bokeh Cercle de Confusion",
+        dof_mode_label: "Mode Autofocus",
+        dof_hint_manual: "Contrôle par curseur",
+        dof_hint_click: "Clic/Survol 3D actif",
+        dof_hint_auto: "Suivi Auto-Scène",
+        dof_mode_manual: "Manuel",
+        dof_mode_pointer: "Curseur 3D",
+        dof_mode_auto: "Auto-Scène",
+        dof_focus_dist: "Distance de Mise au Point",
+        dof_aperture: "Ouverture (f/1.2 à f/16)",
+        dof_focal_range: "Plage de Netteté (Depth Range)",
+        dof_peaking: "Focus Peaking (Laser Plan Focal)",
+        dof_presets: "Diaphragmes Optiques",
+        s1_badge: "Étape 01 — Océan de Vagues Hyperréaliste",
+        s1_title: "La naissance du mouvement à la surface de l'abysse",
+        s1_desc: "Un océan physique intégralement calculé par shaders GLSL : 5 houles directionnelles de Gerstner, diffusion sous-marine turquoise, reflets de Fresnel, profondeur de champ optique et contrôle intégral de la caméra.",
+        s1_cta1: "Calquer l'océan de particules",
+        s1_cta2: "Découvrir l'architecture",
+        scroll_prompt: "Défiler pour matérialiser les particules · Shift+Glisser pour orienter la caméra",
+        s2_badge: "Étape 02 — Fusion & Calque Particulaire",
+        s2_title: "L'océan de particules épouse chaque vague",
+        s2_desc: "48 400 particules luminescentes se verrouillent mathématiquement sur la géométrie exacte des vagues de Gerstner avec un balayage laser holographique pendant que le maillage liquide s'efface.",
+        s2_stat1: "Capteurs lumineux avec Bokeh GPU",
+        s2_stat2: "Liberté Caméra & Optique Temps Réel",
+        s2_cta: "Initier le repliement tubulaire →",
+        s3_badge: "Étape 03 — Repliement en Tube de Particules",
+        s3_title: "La nappe d'ondes se replie en tunnel énergétique",
+        s3_desc: "Les rives gauche et droite de l'océan particulaire s'élèvent dans l'espace 3D et s'enroulent à 360° pour fusionner au zénith. Les vagues océaniques deviennent des pulsations hélicoïdales propulsées le long d'un cylindre quantique.",
+        s3_cta: "Courber le tube en Tore →",
+        s4_badge: "Étape 04 — Singularité Torique Complète",
+        s4_title: "Le Tore de Particules : l'énergie en boucle infinie",
+        s4_desc: "L'axe longitudinal du tube s'incurve sur lui-même jusqu'à sceller ses deux extrémités. L'océan originel est désormais un tore auto-entretenu où chaque vague circule dans un vortex poloïdal et toroïdal perpétuel.",
+        s4_cta1: "Déployer cette expérience",
+        s4_cta2: "↺ Rejouer depuis l'Océan",
+        modal_title: "Accéder au Studio Aetheris",
+        modal_desc: "Recevez nos shaders GLSL sur mesure (Océan Gerstner → Calque Particulaire → Tube → Tore + Bokeh Optique & Rig Caméra) prêts pour Three.js.",
+        modal_btn: "Obtenir l'accès immédiat →",
+        modal_success: "✨ Lien d'accès envoyé avec succès !"
+      },
+      en: {
+        nav_s1: "Realistic Ocean",
+        nav_s2: "Particle Overlay",
+        nav_s3: "Particle Tube",
+        nav_s4: "Energy Torus",
+        hud_step1: "1. Hyper-Realistic Ocean",
+        hud_step2: "2. Particle Overlay",
+        hud_step3: "3. Folding into Tube",
+        hud_step4: "4. Particle Torus",
+        ctrl_title: "GLSL Geometry Engine",
+        ctrl_hide: "Minimize",
+        ctrl_show: "Expand",
+        ctrl_morph: "Metamorphosis",
+        ctrl_waves: "Wave Amplitude",
+        ctrl_glow: "Luminescence",
+        ctrl_mood: "Atmosphere & Spectrum",
+        ctrl_ripple_hint: "✨ 3D Click: Shockwave + Autofocus · Keys 1–4 / Space",
+        hud_autotour: "Cine-Tour",
+        tab_camera: "Camera & Angles",
+        tab_dof: "Depth of Field (DoF)",
+        cam_mode_label: "Camera Control Mode",
+        cam_reset: "Reset",
+        cam_mode_comb: "Scroll+Offset",
+        cam_mode_man: "100% Free",
+        cam_mode_auto: "Auto Scroll",
+        cam_mouse_hint: "💡 Shift+Drag or Right-Click: Angles · Alt+Drag: Height",
+        cam_height: "Camera Height (Altitude Y)",
+        cam_pitch: "Vertical Pitch Angle",
+        cam_yaw: "Horizontal Yaw Angle",
+        cam_roll: "Camera Roll Angle",
+        cam_fov_label: "Lens Focal Length (FOV)",
+        cam_presets: "Cinematic Camera Presets",
+        preset_walo: "⚓ OPV 58 WALO",
+        preset_grazing: "Water Grazing",
+        preset_horizon: "Horizon",
+        preset_high: "High Angle",
+        preset_zenith: "Top-Down Zenith",
+        preset_dutch: "Dutch Roll",
+        preset_core: "Tube/Torus Core",
+        dof_master_label: "Circle of Confusion Bokeh Engine",
+        dof_mode_label: "Autofocus Mode",
+        dof_hint_manual: "Manual slider control",
+        dof_hint_click: "3D Click/Hover active",
+        dof_hint_auto: "Auto-Scene focus",
+        dof_mode_manual: "Manual",
+        dof_mode_pointer: "3D Pointer",
+        dof_mode_auto: "Auto-Scene",
+        dof_focus_dist: "Focus Distance",
+        dof_aperture: "Aperture (f/1.2 to f/16)",
+        dof_focal_range: "Depth Range (In-Focus Zone)",
+        dof_peaking: "Focus Peaking (Focal Laser)",
+        dof_presets: "Optical F-Stop Presets",
+        s1_badge: "Stage 01 — Hyper-Realistic Wave Ocean",
+        s1_title: "Where motion awakens across the deep abyss",
+        s1_desc: "A physical water surface driven by custom GLSL shaders: 5 directional Gerstner swells, subsurface teal scattering, Fresnel reflections, optical Depth of Field, and full 6-DoF camera rig control.",
+        s1_cta1: "Overlay the particle ocean",
+        s1_cta2: "Explore the architecture",
+        scroll_prompt: "Scroll to materialize particles · Shift+Drag to aim camera",
+        s2_badge: "Stage 02 — Particle Ocean Overlay & Fusion",
+        s2_title: "A luminous swarm locked onto every wave crest",
+        s2_desc: "48,400 glowing particles lock mathematically onto the exact Gerstner wave elevation of the water surface. Fly low over the crests or soar into a top-down zenith view while sculpting optical bokeh.",
+        s2_stat1: "Light nodes with GPU Bokeh",
+        s2_stat2: "Real-Time Camera & Optics Rig",
+        s2_cta: "Initiate tubular folding →",
+        s3_badge: "Stage 03 — Folding into a Particle Tube",
+        s3_title: "The wave sheet curls into a quantum tunnel",
+        s3_desc: "The left and right edges of the particle ocean rise upward in 3D space and roll 360° inward to seal at the zenith. Ocean swells transform into helical energy pulses racing down a cylinder.",
+        s3_cta: "Bend the tube into a Torus →",
+        s4_badge: "Stage 04 — Closed Toroidal Singularity",
+        s4_title: "The Particle Torus: infinite circulating energy",
+        s4_desc: "The longitudinal axis of the cylinder curves around in 3D space until both ends fuse seamlessly. The original ocean is now a self-sustaining torus with cinematic shallow focus.",
+        s4_cta1: "Deploy this experience",
+        s4_cta2: "↺ Replay from the Ocean",
+        modal_title: "Enter the Aetheris Studio",
+        modal_desc: "Get access to our custom GLSL shader pipeline (Gerstner Ocean → Particle Overlay → Tube → Torus + Optical Bokeh & Camera Rig) ready for Three.js.",
+        modal_btn: "Get instant access →",
+        modal_success: "✨ Access link sent to your inbox!"
+      }
+    };
+
+    let currentLang = 'fr';
+    let labExpanded = true;
+    let studioExpanded = true;
+    let activeStudioTab = 'camera'; // 'camera' | 'dof'
+
+    function setLanguage(lang) {
+      currentLang = lang;
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (translations[lang][key]) {
+          el.textContent = translations[lang][key];
+        }
+      });
+
+      const frSpan = document.getElementById('lang-fr');
+      const enSpan = document.getElementById('lang-en');
+      if (lang === 'fr') {
+        frSpan.className = 'text-white font-semibold';
+        enSpan.className = 'text-white/40';
+      } else {
+        enSpan.className = 'text-white font-semibold';
+        frSpan.className = 'text-white/40';
+      }
+      updateToggleLabels();
+      updateFocusModeUI();
+      updateCameraModeUI();
+    }
+
+    function updateToggleLabels() {
+      const labelLab = document.getElementById('toggle-lab-label');
+      if (labelLab) {
+        labelLab.textContent = labExpanded ? translations[currentLang].ctrl_hide : translations[currentLang].ctrl_show;
+      }
+      const labelStudio = document.getElementById('toggle-studio-label');
+      if (labelStudio) {
+        labelStudio.textContent = studioExpanded ? translations[currentLang].ctrl_hide : translations[currentLang].ctrl_show;
+      }
+    }
+
+    function toggleLabPanel() {
+      const body = document.getElementById('lab-controls-body');
+      labExpanded = !labExpanded;
+      body.classList.toggle('hidden', !labExpanded);
+      updateToggleLabels();
+    }
+
+    function toggleStudioPanel() {
+      const body = document.getElementById('studio-controls-body');
+      studioExpanded = !studioExpanded;
+      body.classList.toggle('hidden', !studioExpanded);
+      updateToggleLabels();
+    }
+
+    function switchStudioTab(tab) {
+      activeStudioTab = tab;
+      if (!studioExpanded) toggleStudioPanel();
+
+      const tabCam = document.getElementById('tab-btn-camera');
+      const tabDof = document.getElementById('tab-btn-dof');
+      const panelCam = document.getElementById('panel-camera-rig');
+      const panelDof = document.getElementById('panel-optical-dof');
+
+      if (tab === 'camera') {
+        panelCam.classList.remove('hidden');
+        panelDof.classList.add('hidden');
+        tabCam.className = 'flex-1 py-1.5 px-2.5 rounded-lg text-[11px] font-mono-tech uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-1.5 bg-amber-500/25 text-amber-200 border border-amber-400/35';
+        tabDof.className = 'flex-1 py-1.5 px-2.5 rounded-lg text-[11px] font-mono-tech uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-1.5 text-white/60 hover:text-white';
+      } else {
+        panelCam.classList.add('hidden');
+        panelDof.classList.remove('hidden');
+        tabDof.className = 'flex-1 py-1.5 px-2.5 rounded-lg text-[11px] font-mono-tech uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-1.5 bg-emerald-500/25 text-emerald-200 border border-emerald-400/35';
+        tabCam.className = 'flex-1 py-1.5 px-2.5 rounded-lg text-[11px] font-mono-tech uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-1.5 text-white/60 hover:text-white';
+      }
+    }
+
+    document.getElementById('lang-toggle').addEventListener('click', () => {
+      setLanguage(currentLang === 'fr' ? 'en' : 'fr');
+    });
+
+    /* Modal helpers (Top-Layer <dialog closedby="any"> + Safari light-dismiss fallback) */
+    const modal = document.getElementById('cta-modal');
+    const feedback = document.getElementById('form-feedback');
+
+    if (modal && !('closedBy' in HTMLDialogElement.prototype)) {
+      modal.addEventListener('click', (event) => {
+        if (event.target !== modal) return;
+        const rect = modal.getBoundingClientRect();
+        const isDialogContent = (
+          rect.top <= event.clientY &&
+          event.clientY <= rect.top + rect.height &&
+          rect.left <= event.clientX &&
+          event.clientX <= rect.left + rect.width
+        );
+        if (isDialogContent) return;
+        modal.close();
+      });
+    }
+
+    function openModal() {
+      feedback.classList.add('hidden');
+      if (typeof modal.showModal === 'function') {
+        modal.showModal();
+      } else {
+        modal.setAttribute('open', '');
+      }
+    }
+
+    function closeModal() {
+      if (typeof modal.close === 'function') {
+        modal.close();
+      } else {
+        modal.removeAttribute('open');
+      }
+    }
+
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      feedback.classList.remove('hidden');
+      setTimeout(() => {
+        closeModal();
+        e.target.reset();
+      }, 1600);
+    }
+
+    function jumpToStage(stageIndex) {
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      const targetFractions = [0.0, 0.3333, 0.6666, 0.995];
+      const targetY = maxScroll * targetFractions[stageIndex];
+      window.scrollTo({ top: targetY, behavior: 'smooth' });
+    }
+
+    /* -------------------------------------------------------------------------
+       2. SHARED GLSL GERSTNER WAVE FUNCTION (5 DIRECTIONAL SWELLS)
+       ------------------------------------------------------------------------- */
+    const SHARED_GERSTNER_GLSL = `
+      vec4 computeGerstnerOcean(vec2 planeXZ, float time, float ampScale, out vec3 outNormal) {
+        vec3 pos = vec3(planeXZ.x, 0.0, planeXZ.y);
+        vec3 tangent = vec3(1.0, 0.0, 0.0);
+        vec3 binormal = vec3(0.0, 0.0, 1.0);
+
+        vec4 waves[5];
+        waves[0] = vec4(0.88, 0.47, 0.26, 26.0);
+        waves[1] = vec4(-0.62, 0.78, 0.22, 17.5);
+        waves[2] = vec4(0.32, -0.94, 0.18, 11.2);
+        waves[3] = vec4(-0.91, -0.41, 0.15, 6.8);
+        waves[4] = vec4(0.74, -0.67, 0.12, 4.1);
+
+        float crestAccum = 0.0;
+
+        for (int i = 0; i < 5; i++) {
+          vec2 d = normalize(waves[i].xy);
+          float steepness = waves[i].z * ampScale;
+          float wl = waves[i].w;
+          float k = 6.2831853 / wl;
+          float c = sqrt(9.8 / k);
+          float f = k * (dot(d, planeXZ) - c * time * 1.15);
+          float a = steepness / k;
+
+          pos.x += d.x * (a * cos(f));
+          pos.y += a * sin(f);
+          pos.z += d.y * (a * cos(f));
+
+          tangent += vec3(
+            -d.x * d.x * (steepness * sin(f)),
+            d.x * (steepness * cos(f)),
+            -d.x * d.y * (steepness * sin(f))
+          );
+
+          binormal += vec3(
+            -d.x * d.y * (steepness * sin(f)),
+            d.y * (steepness * cos(f)),
+            -d.y * d.y * (steepness * sin(f))
+          );
+
+          crestAccum += sin(f) * (0.32 / float(i + 1));
+        }
+
+        float microRipple = sin(planeXZ.x * 0.65 + time * 2.2) * cos(planeXZ.y * 0.65 - time * 1.8) * 0.18 * ampScale;
+        pos.y += microRipple;
+
+        // Interactive 3D Shockwave Ring when user clicks the ocean / particle field
+        if (uShockwaveTime > 0.01 && uShockwaveTime < 6.5) {
+          vec2 toWave = planeXZ - uShockwaveCenter;
+          float dWave = length(toWave);
+          float waveRadius = uShockwaveTime * 19.5;
+          float ringDist = dWave - waveRadius;
+          float envelope = exp(-ringDist * ringDist * 0.16) * exp(-uShockwaveTime * 0.58);
+          float rippleHeight = sin(ringDist * 1.9 - uShockwaveTime * 9.0) * envelope * 1.35 * ampScale;
+          pos.y += rippleHeight;
+          vec2 radialDir = dWave > 0.001 ? (toWave / dWave) : vec2(1.0, 0.0);
+          float dRipple = cos(ringDist * 1.9 - uShockwaveTime * 9.0) * 1.9 * envelope * 1.35 * ampScale;
+          tangent.y += radialDir.x * dRipple;
+          binormal.y += radialDir.y * dRipple;
+          crestAccum += envelope * 0.85;
+        }
+
+        outNormal = normalize(cross(binormal, tangent));
+        float normalizedCrest = clamp((pos.y / (2.6 * max(0.35, ampScale))) * 0.5 + 0.5 + crestAccum * 0.25, 0.0, 1.0);
+        return vec4(pos, normalizedCrest);
+      }
+    `;
+
+    /* -------------------------------------------------------------------------
+       3. HYPER-REALISTIC OCEAN MESH SHADERS + OPTICAL DOF & FOCUS PEAKING
+       ------------------------------------------------------------------------- */
+    const oceanVertexShader = `
+      uniform float uTime;
+      uniform float uWaveAmp;
+      uniform vec2 uShockwaveCenter;
+      uniform float uShockwaveTime;
+
+      varying vec3 vWorldPos;
+      varying vec3 vNormal;
+      varying float vCrest;
+      varying float vViewZ;
+
+      ${SHARED_GERSTNER_GLSL}
+
+      void main() {
+        vec2 normXZ = position.xz * 2.0;
+        vec2 planeXZ = normXZ * (135.0 + abs(normXZ) * abs(normXZ) * 185.0);
+        vec3 computedNormal;
+        vec4 waveData = computeGerstnerOcean(planeXZ, uTime, uWaveAmp, computedNormal);
+
+        vec3 displaced = waveData.xyz;
+        vCrest = waveData.w;
+        vNormal = computedNormal;
+
+        vec4 worldPosition = modelMatrix * vec4(displaced, 1.0);
+        vWorldPos = worldPosition.xyz;
+
+        vec4 mvPosition = viewMatrix * worldPosition;
+        vViewZ = -mvPosition.z;
+
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `;
+
+    const oceanFragmentShader = `
+      uniform float uTime;
+      uniform float uOceanOpacity;
+      uniform float uScanlineGlow;
+      uniform vec3 uCameraPos;
+      uniform vec2 uShockwaveCenter;
+      uniform float uShockwaveTime;
+      uniform float uMoodPalette;
+      uniform vec2 uShipPos;
+      uniform float uShipHeading;
+
+      // Optical Depth of Field Uniforms
+      uniform float uDofEnabled;
+      uniform float uFocusDistance;
+      uniform float uFocalRange;
+      uniform float uAperture;
+      uniform float uFocusPeaking;
+
+      varying vec3 vWorldPos;
+      varying vec3 vNormal;
+      varying float vCrest;
+      varying float vViewZ;
+
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+      }
+
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = hash(i);
+        float b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0));
+        float d = hash(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+      }
+
+      void main() {
+        if (uOceanOpacity <= 0.005) discard;
+
+        float distFromFocus = abs(vViewZ - uFocusDistance);
+        float defocus = max(0.0, distFromFocus - uFocalRange);
+        float coc = clamp((defocus / 22.0) * uAperture * uDofEnabled, 0.0, 1.0);
+
+        vec2 detailCoord1 = vWorldPos.xz * 0.42 + vec2(uTime * 0.6, -uTime * 0.45);
+        vec2 detailCoord2 = vWorldPos.xz * 1.15 - vec2(uTime * 0.85, uTime * 0.55);
+        float n1 = noise(detailCoord1);
+        float n2 = noise(detailCoord2);
+
+        vec3 finePerturb = normalize(vec3((n1 - 0.5) * 0.26, 1.0, (n2 - 0.5) * 0.26));
+        float detailSharpness = 0.28 * (1.0 - coc * 0.82);
+        vec3 N = normalize(mix(vNormal, finePerturb, detailSharpness));
+
+        // Flip normal if camera is underwater (-Y)
+        if (uCameraPos.y < vWorldPos.y) {
+          N = -N;
+        }
+
+        vec3 V = normalize(uCameraPos - vWorldPos);
+        vec3 L = normalize(vec3(0.25, 0.48, -0.84));
+        vec3 H = normalize(L + V);
+
+        float NoV = max(dot(N, V), 0.0);
+        float fresnel = pow(1.0 - NoV, 4.2);
+
+        vec3 deepWaterColor = vec3(0.008, 0.032, 0.085);
+        vec3 shallowSSSColor = vec3(0.02, 0.44, 0.62);
+        vec3 skyReflectionColor = vec3(0.18, 0.48, 0.78);
+        vec3 horizonGlowColor = vec3(0.95, 0.48, 0.22);
+
+        if (uMoodPalette > 0.5 && uMoodPalette < 1.5) {
+          // Bioluminescent Emerald / Cyan
+          deepWaterColor = vec3(0.004, 0.042, 0.055);
+          shallowSSSColor = vec3(0.04, 0.68, 0.58);
+          skyReflectionColor = vec3(0.10, 0.58, 0.68);
+          horizonGlowColor = vec3(0.18, 0.96, 0.72);
+        } else if (uMoodPalette >= 1.5 && uMoodPalette < 2.5) {
+          // Solar Flare Amber / Crimson
+          deepWaterColor = vec3(0.035, 0.012, 0.038);
+          shallowSSSColor = vec3(0.55, 0.22, 0.14);
+          skyReflectionColor = vec3(0.68, 0.34, 0.24);
+          horizonGlowColor = vec3(1.0, 0.62, 0.18);
+        } else if (uMoodPalette >= 2.5) {
+          // Quantum Nebula Violet / Magenta
+          deepWaterColor = vec3(0.022, 0.010, 0.065);
+          shallowSSSColor = vec3(0.32, 0.18, 0.68);
+          skyReflectionColor = vec3(0.42, 0.28, 0.85);
+          horizonGlowColor = vec3(0.92, 0.28, 0.76);
+        }
+
+        float sssFactor = smoothstep(0.42, 0.92, vCrest) * pow(max(dot(L, -V) * 0.5 + 0.5, 0.0), 1.5);
+        vec3 waterBase = mix(deepWaterColor, shallowSSSColor, sssFactor * 0.85 + vCrest * 0.25);
+
+        vec3 R = reflect(-V, N);
+        float horizonBlend = smoothstep(0.45, -0.05, R.y);
+        vec3 envReflection = mix(skyReflectionColor, mix(skyReflectionColor, horizonGlowColor, 0.45), horizonBlend);
+
+        vec3 color = mix(waterBase, envReflection, clamp(fresnel * 0.88, 0.05, 0.92));
+
+        float specExponentSharp = mix(380.0, 28.0, coc);
+        float specBroad = pow(max(dot(N, H), 0.0), 48.0);
+        float specSharp = pow(max(dot(N, H), 0.0), specExponentSharp);
+        // Micro-facet sun glitter on wave crests
+        float glitterFacet = smoothstep(0.76, 0.96, n1 * n2 * 1.85) * pow(max(dot(N, H), 0.0), 14.0) * (1.0 - coc * 0.7);
+        color += vec3(0.55, 0.82, 1.0) * specBroad * 0.45;
+        color += vec3(1.0, 0.88, 0.72) * (specSharp * mix(1.9, 0.55, coc) + glitterFacet * 0.85);
+
+        // Luminous Shockwave Ring Highlight on Water
+        if (uShockwaveTime > 0.01 && uShockwaveTime < 6.5) {
+          float dWave = length(vWorldPos.xz - uShockwaveCenter);
+          float ringGlow = exp(-abs(dWave - uShockwaveTime * 19.5) * 0.85) * exp(-uShockwaveTime * 0.55);
+          color += mix(vec3(0.25, 0.92, 1.0), horizonGlowColor, 0.35) * ringGlow * 1.35;
+        }
+
+        float foamNoise = noise(vWorldPos.xz * 0.85 + uTime * 0.3);
+        float foamMask = smoothstep(0.68 - coc * 0.15, 0.94 + coc * 0.1, vCrest + (foamNoise - 0.5) * 0.18);
+        vec3 foamColor = vec3(0.78, 0.94, 1.0);
+        color = mix(color, foamColor, foamMask * (0.65 - coc * 0.3));
+
+        // OPV 58S WALO Kelvin Bow Wave, Hull Foam & Stern Propeller Wake
+        vec2 relShip = vWorldPos.xz - uShipPos;
+        float ch = cos(uShipHeading);
+        float sh = sin(uShipHeading);
+        // Ship local coords: localX = along hull (+bow at +9.5m, -stern at -9.5m), localZ = athwartships
+        float localX = relShip.x * ch - relShip.y * sh;
+        float localZ = relShip.x * sh + relShip.y * ch;
+
+        // 1. Bow splash & Kelvin V-wake arms peeling from bow (localX ~ +8.5m to -28m)
+        float distFromBow = 8.8 - localX;
+        float wakeNoise = noise(vec2(localX * 0.65 - uTime * 3.8, localZ * 0.85)) * 0.55
+                        + noise(vec2(localX * 1.4 - uTime * 5.2, localZ * 1.6)) * 0.45;
+        if (distFromBow > -1.5 && distFromBow < 38.0) {
+          float vSpread = max(0.35, distFromBow * 0.24 + 0.55);
+          float armDist = abs(abs(localZ) - vSpread);
+          float vArmFoam = exp(-armDist * armDist * 1.45) * smoothstep(-1.2, 2.0, distFromBow) * (1.0 - smoothstep(14.0, 36.0, distFromBow));
+          // Turbulent propeller wash & stern trail along centerline behind hull
+          float sternDist = -localX - 7.5;
+          float centerWake = 0.0;
+          if (sternDist > -3.0 && sternDist < 32.0) {
+            float trailWidth = 1.15 + max(0.0, sternDist) * 0.085;
+            centerWake = exp(-(localZ * localZ) / (trailWidth * trailWidth)) * smoothstep(-3.0, 1.5, sternDist) * (1.0 - smoothstep(10.0, 32.0, sternDist));
+          }
+          // Hull waterline collar foam
+          float hullEll = (localX * localX) / (9.2 * 9.2) + (localZ * localZ) / (1.85 * 1.85);
+          float collarFoam = exp(-abs(hullEll - 1.0) * 6.5) * step(hullEll, 1.65);
+
+          float totalShipFoam = clamp((vArmFoam * 0.95 + centerWake * 0.88 + collarFoam * 1.1) * (0.62 + wakeNoise * 0.65), 0.0, 1.0);
+          color = mix(color, vec3(0.93, 0.98, 1.0), totalShipFoam * (1.0 - coc * 0.45));
+        }
+
+        vec3 bokehHaze = mix(vec3(0.03, 0.14, 0.28), vec3(0.12, 0.32, 0.52), vCrest);
+        color = mix(color, bokehHaze, coc * 0.48);
+
+        // Holographic Laser Sweep + Grid Lock-On during Stage 2
+        float gridPulse = sin(vWorldPos.x * 0.9) * sin(vWorldPos.z * 0.9);
+        float holoLine = smoothstep(0.92, 0.99, gridPulse) * uScanlineGlow;
+        float sweepZ = mod(uTime * 36.0, 260.0) - 130.0;
+        float laserBeam = exp(-abs(vWorldPos.z - sweepZ) * 1.15) * uScanlineGlow;
+        color += vec3(0.22, 0.78, 0.98) * (holoLine * 0.95 + laserBeam * 1.15);
+
+        if (uDofEnabled > 0.5 && uFocusPeaking > 0.01) {
+          float inFocusZone = 1.0 - smoothstep(0.0, max(1.2, uFocalRange * 0.65), distFromFocus);
+          float exactFocusLine = 1.0 - smoothstep(0.0, 0.45, distFromFocus);
+          vec3 laserEmerald = vec3(0.15, 0.98, 0.68);
+          color += laserEmerald * (inFocusZone * 0.22 + exactFocusLine * 0.85) * uFocusPeaking;
+        }
+
+        // Atmospheric horizon mist fusion so the ocean stretches seamlessly across the full horizon
+        float dist = length(vWorldPos.xz - uCameraPos.xz);
+        float horizonMist = smoothstep(95.0, 290.0, dist);
+        vec3 horizonAtmosphere = mix(deepWaterColor * 0.65, mix(skyReflectionColor, horizonGlowColor, 0.38) * 0.28, clamp(fresnel * 1.1, 0.0, 1.0));
+        color = mix(color, horizonAtmosphere, horizonMist * 0.88);
+
+        float maxCoord = max(abs(vWorldPos.x), abs(vWorldPos.z));
+        float edgeFade = 1.0 - smoothstep(230.0, 318.0, maxCoord);
+
+        gl_FragColor = vec4(color, uOceanOpacity * edgeFade);
+      }
+    `;
+
+    /* -------------------------------------------------------------------------
+       4. PARTICLE SHADERS WITH REAL-TIME OPTICAL CIRCLE-OF-CONFUSION BOKEH
+       ------------------------------------------------------------------------- */
+    const particleVertexShader = `
+      uniform float uTime;
+      uniform float uWaveAmp;
+      uniform float uParticleOpacity;
+      uniform float uFoldTube;
+      uniform float uBendTorus;
+      uniform float uGlowBoost;
+      uniform float uPixelRatio;
+      uniform vec2 uShockwaveCenter;
+      uniform float uShockwaveTime;
+      uniform float uMoodPalette;
+      uniform vec2 uShipPos;
+      uniform float uShipHeading;
+
+      // Optical Depth of Field Uniforms
+      uniform float uDofEnabled;
+      uniform float uFocusDistance;
+      uniform float uFocalRange;
+      uniform float uAperture;
+      uniform float uFocusPeaking;
+
+      attribute vec2 aGridUV;
+      attribute float aRandom;
+
+      varying vec3 vColor;
+      varying float vAlpha;
+      varying float vCoC;
+      varying float vInFocusBand;
+
+      const float PI = 3.141592653589793;
+
+      ${SHARED_GERSTNER_GLSL}
+
+      void main() {
+        float u = aGridUV.x;
+        float v = aGridUV.y;
+
+        // A. STAGE 1 & 2: FULL-HORIZON GERSTNER OCEAN SURFACE COORDINATES
+        vec2 normUV = (aGridUV - 0.5) * 2.0;
+        vec2 planeXZ = normUV * (135.0 + abs(normUV) * abs(normUV) * 185.0);
+
+        vec3 waveNormal;
+        vec4 gerstner = computeGerstnerOcean(planeXZ, uTime, uWaveAmp, waveNormal);
+        vec3 oceanPos = gerstner.xyz;
+        float crest = gerstner.w;
+        oceanPos.y += 0.08;
+
+        // B. STAGE 3: FOLDING THE OCEAN SHEET INTO A 3D PARTICLE TUBE
+        float theta = (u - 0.5) * 2.0 * PI;
+        float tubeBaseRadius = 11.2;
+
+        float spiralWave = sin(theta * 5.0 + v * 25.1327 - uTime * 2.6) * 0.55 * uWaveAmp
+                         + cos(theta * 3.0 - v * 12.5663 + uTime * 1.9) * 0.35 * uWaveAmp;
+
+        float radialRelief = mix(oceanPos.y * 0.55, spiralWave, uFoldTube);
+        float rTube = tubeBaseRadius + radialRelief;
+
+        vec3 tubePos = vec3(
+          sin(theta) * rTube,
+          -cos(theta) * rTube,
+          (v - 0.5) * 150.0
+        );
+
+        float curlT = smoothstep(0.0, 1.0, uFoldTube);
+        vec3 foldedPos;
+        if (curlT < 0.001) {
+          foldedPos = oceanPos;
+        } else {
+          float liftArc = sin(abs(u - 0.5) * PI) * sin(curlT * PI) * 8.5;
+          foldedPos.x = mix(oceanPos.x, tubePos.x, curlT);
+          foldedPos.y = mix(oceanPos.y, tubePos.y, curlT) + liftArc * (1.0 - curlT * 0.65);
+          foldedPos.z = mix(oceanPos.z, tubePos.z, curlT);
+        }
+
+        // C. STAGE 4: BENDING THE CYLINDER AXIS INTO A CLOSED 3D TORUS
+        float poloidalAngle = theta + uBendTorus * (v * 4.0 * PI - uTime * 0.85);
+        float toroidalAngle = (v - 0.5) * 2.0 * PI + uTime * 0.22;
+
+        float majorRadius = 15.5;
+        float minorRadius = 5.6 + spiralWave * 0.72;
+
+        float ringRadius = majorRadius + minorRadius * cos(poloidalAngle);
+        vec3 rawTorus = vec3(
+          ringRadius * cos(toroidalAngle),
+          ringRadius * sin(toroidalAngle),
+          minorRadius * sin(poloidalAngle)
+        );
+
+        float tiltX = 0.52;
+        float tiltY = -0.24;
+        vec3 tiltedTorus = vec3(
+          rawTorus.x,
+          rawTorus.y * cos(tiltX) - rawTorus.z * sin(tiltX),
+          rawTorus.y * sin(tiltX) + rawTorus.z * cos(tiltX)
+        );
+        tiltedTorus = vec3(
+          tiltedTorus.x * cos(tiltY) + tiltedTorus.z * sin(tiltY),
+          tiltedTorus.y,
+          -tiltedTorus.x * sin(tiltY) + tiltedTorus.z * cos(tiltY)
+        );
+
+        float bendT = smoothstep(0.0, 1.0, uBendTorus);
+        float bendArcZ = sin(abs(v - 0.5) * PI) * sin(bendT * PI) * -12.0;
+        vec3 finalPos = mix(foldedPos, tiltedTorus, bendT);
+        finalPos.z += bendArcZ;
+
+        // D. DYNAMIC COLOR PALETTE (4 ATMOSPHERIC MOODS)
+        vec3 colDeepBlue  = vec3(0.08, 0.38, 0.92);
+        vec3 colCyanGlow  = vec3(0.22, 0.78, 0.98);
+        vec3 colIndigo    = vec3(0.45, 0.36, 0.96);
+        vec3 colWarmCoral = vec3(0.98, 0.45, 0.12);
+        vec3 colHotGold   = vec3(1.00, 0.76, 0.38);
+
+        if (uMoodPalette > 0.5 && uMoodPalette < 1.5) {
+          colDeepBlue  = vec3(0.02, 0.45, 0.55);
+          colCyanGlow  = vec3(0.12, 0.95, 0.78);
+          colIndigo    = vec3(0.08, 0.72, 0.88);
+          colWarmCoral = vec3(0.32, 1.00, 0.62);
+          colHotGold   = vec3(0.82, 1.00, 0.88);
+        } else if (uMoodPalette >= 1.5 && uMoodPalette < 2.5) {
+          colDeepBlue  = vec3(0.42, 0.12, 0.28);
+          colCyanGlow  = vec3(0.95, 0.36, 0.18);
+          colIndigo    = vec3(0.82, 0.22, 0.48);
+          colWarmCoral = vec3(1.00, 0.64, 0.14);
+          colHotGold   = vec3(1.00, 0.92, 0.55);
+        } else if (uMoodPalette >= 2.5) {
+          colDeepBlue  = vec3(0.24, 0.12, 0.78);
+          colCyanGlow  = vec3(0.62, 0.32, 0.98);
+          colIndigo    = vec3(0.88, 0.24, 0.82);
+          colWarmCoral = vec3(0.98, 0.38, 0.68);
+          colHotGold   = vec3(0.88, 0.78, 1.00);
+        }
+
+        float waveColorMix = clamp(crest * 1.15 + sin(u * 6.28 + uTime * 0.5) * 0.12, 0.0, 1.0);
+        vec3 oceanParticleColor = mix(colDeepBlue, colCyanGlow, smoothstep(0.15, 0.62, waveColorMix));
+        oceanParticleColor = mix(oceanParticleColor, colWarmCoral, smoothstep(0.62, 0.92, waveColorMix));
+        oceanParticleColor = mix(oceanParticleColor, colHotGold, smoothstep(0.88, 1.0, waveColorMix));
+
+        float cosmicGradient = 0.5 + 0.5 * sin(poloidalAngle + toroidalAngle * 0.5);
+        vec3 cosmicColor = mix(colCyanGlow, colIndigo, smoothstep(0.0, 0.45, cosmicGradient));
+        cosmicColor = mix(cosmicColor, colWarmCoral, smoothstep(0.45, 0.85, cosmicGradient));
+        cosmicColor = mix(cosmicColor, colHotGold, smoothstep(0.85, 1.0, cosmicGradient));
+
+        vec3 baseColor = mix(oceanParticleColor, cosmicColor, max(uFoldTube * 0.65, uBendTorus)) * uGlowBoost;
+
+        // E. REAL-TIME OPTICAL DEPTH OF FIELD (CIRCLE OF CONFUSION & BOKEH)
+        vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+
+        float viewZ = max(1.0, -mvPosition.z);
+        float distFromFocus = abs(viewZ - uFocusDistance);
+        float defocusDistance = max(0.0, distFromFocus - uFocalRange);
+
+        float rawCoC = (defocusDistance / 18.0) * uAperture * uDofEnabled;
+        vCoC = clamp(rawCoC, 0.0, 1.0);
+
+        vInFocusBand = (1.0 - smoothstep(0.0, max(0.9, uFocalRange * 0.55), distFromFocus)) * uFocusPeaking * uDofEnabled;
+
+        vec3 peakingColor = vec3(0.35, 1.0, 0.78);
+        vColor = mix(baseColor, peakingColor * 1.45, vInFocusBand * 0.78);
+
+        float crestSizeBoost = 0.75 + crest * 0.85 + aRandom * 0.45;
+        float sharpSize = (58.0 / viewZ) * uPixelRatio * crestSizeBoost;
+        float bokehExpansion = 1.0 + vCoC * vCoC * 6.8 + vCoC * 2.2;
+        gl_PointSize = clamp(sharpSize * bokehExpansion, 1.5, 92.0 * uPixelRatio);
+
+        float energyConservation = 1.0 / (1.0 + vCoC * 3.4 + vCoC * vCoC * 3.8);
+
+        float flatEdgeMask = smoothstep(0.0, 0.03, u) * smoothstep(1.0, 0.97, u)
+                           * smoothstep(0.0, 0.03, v) * smoothstep(1.0, 0.97, v);
+        float horizonFade = 1.0 - smoothstep(180.0, 315.0, length(planeXZ)) * (1.0 - uFoldTube);
+        float morphMask = mix(flatEdgeMask * horizonFade, 1.0, uFoldTube);
+
+        vAlpha = uParticleOpacity * morphMask * energyConservation * (0.72 + 0.28 * sin(uTime * 2.5 + aRandom * 6.28));
+      }
+    `;
+
+    const particleFragmentShader = `
+      varying vec3 vColor;
+      varying float vAlpha;
+      varying float vCoC;
+      varying float vInFocusBand;
+
+      void main() {
+        if (vAlpha <= 0.003) discard;
+
+        vec2 uv = gl_PointCoord.xy - vec2(0.5);
+        float r = length(uv) * 2.0;
+        if (r > 1.0) discard;
+
+        float sharpCore = smoothstep(0.42, 0.0, r);
+        float sharpHalo = pow(1.0 - r, 2.4);
+        float sharpProfile = sharpCore * 0.75 + sharpHalo * 0.65;
+
+        float discBody = smoothstep(1.0, 0.74, r);
+        float bokehRim = smoothstep(0.56, 0.86, r) * smoothstep(1.0, 0.83, r);
+        float bokehProfile = discBody * (0.46 + bokehRim * 0.62);
+
+        float intensity = mix(sharpProfile, bokehProfile, smoothstep(0.08, 0.65, vCoC));
+        float coreSparkle = sharpCore * (1.0 - vCoC) * (0.38 + vInFocusBand * 0.48);
+
+        // Subtle optical chromatic dispersion on out-of-focus bokeh rim
+        vec3 finalCol = vColor + vec3(coreSparkle);
+        finalCol.r += bokehRim * vCoC * 0.16;
+        finalCol.b += bokehRim * vCoC * 0.22;
+
+        gl_FragColor = vec4(finalCol, intensity * vAlpha);
+      }
+    `;
+
+    /* -------------------------------------------------------------------------
+       5. GLOBAL STATE: OPTICAL DOF & 6-DOF CAMERA RIG CONTROLS
+       ------------------------------------------------------------------------- */
+    // A. Optical Depth of Field State
+    let dofEnabled = true;
+    let focusMode = 'pointer'; // 'manual' | 'pointer' | 'auto'
+    let focusPeakingMode = 'auto'; // 'auto' | 'on' | 'off'
+    let peakingTimer = null;
+    let transientPeakingBoost = 0.0;
+
+    let targetFocusDistance = 27.0;
+    let currentFocusDistance = 27.0;
+    let currentFStop = 2.2;
+    let currentFocalRange = 4.5;
+
+    // B. Camera Rig State (Height, Pitch, Yaw, Roll, FOV, Mode)
+    let cameraMode = 'combined'; // 'auto' (Scroll only) | 'manual' (100% locked to sliders) | 'combined' (Scroll + User offsets)
+    let userCamHeight = 7.2;     // Altitude in meters (-5m to +45m)
+    let userCamPitch = -8.0;     // Vertical tilt in degrees (-85° to +45°)
+    let userCamYaw = 0.0;        // Horizontal pan in degrees (-180° to +180°)
+    let userCamRoll = 0.0;       // Dutch roll angle in degrees (-45° to +45°)
+    let targetCameraFOV = 58;    // Vertical FOV in degrees (35mm default)
+    let currentCameraFOV = 58;
+    let currentLensMM = 35;
+
+    // Smoothly interpolated camera rig values
+    let smoothCamHeight = 7.2;
+    let smoothCamPitch = -8.0;
+    let smoothCamYaw = 0.0;
+    let smoothCamRoll = 0.0;
+
+    function fStopToApertureStrength(fStop) {
+      return Math.pow(2.8 / Math.max(1.1, fStop), 1.45);
+    }
+
+    function triggerTransientPeaking() {
+      if (focusPeakingMode === 'off') return;
+      transientPeakingBoost = 1.0;
+      if (peakingTimer) clearTimeout(peakingTimer);
+      peakingTimer = setTimeout(() => {
+        transientPeakingBoost = 0.0;
+      }, 1100);
+    }
+
+    function updateOpticsSummaryHUD() {
+      const summary = document.getElementById('hud-optics-summary');
+      const valDist = document.getElementById('val-focus-dist');
+      const valAp = document.getElementById('val-aperture');
+      const valRange = document.getElementById('val-focal-range');
+      const sliderDist = document.getElementById('slider-focus-dist');
+      const sliderAp = document.getElementById('slider-aperture');
+      const sliderRange = document.getElementById('slider-focal-range');
+
+      if (valDist) valDist.textContent = targetFocusDistance.toFixed(1) + ' m';
+      if (valAp) valAp.textContent = 'f/' + currentFStop.toFixed(1);
+      if (valRange) valRange.textContent = '± ' + currentFocalRange.toFixed(1) + ' m';
+
+      if (sliderDist && document.activeElement !== sliderDist) sliderDist.value = targetFocusDistance.toFixed(1);
+      if (sliderAp && document.activeElement !== sliderAp) sliderAp.value = currentFStop.toFixed(1);
+      if (sliderRange && document.activeElement !== sliderRange) sliderRange.value = currentFocalRange.toFixed(1);
+
+      if (summary) {
+        summary.textContent = dofEnabled
+          ? `${targetFocusDistance.toFixed(0)}m · f/${currentFStop.toFixed(1)}`
+          : 'DoF OFF';
+      }
+    }
+
+    function updateCameraRigHUD(effectiveHeight, effectivePitch, effectiveYaw, effectiveRoll) {
+      const dispH = effectiveHeight !== undefined ? effectiveHeight : userCamHeight;
+      const dispP = effectivePitch !== undefined ? effectivePitch : userCamPitch;
+      const dispY = effectiveYaw !== undefined ? effectiveYaw : userCamYaw;
+      const dispR = effectiveRoll !== undefined ? effectiveRoll : userCamRoll;
+
+      const valH = document.getElementById('val-cam-height');
+      const valP = document.getElementById('val-cam-pitch');
+      const valY = document.getElementById('val-cam-yaw');
+      const valR = document.getElementById('val-cam-roll');
+      const summaryCam = document.getElementById('hud-camera-summary');
+
+      const sliderH = document.getElementById('slider-cam-height');
+      const sliderP = document.getElementById('slider-cam-pitch');
+      const sliderY = document.getElementById('slider-cam-yaw');
+      const sliderR = document.getElementById('slider-cam-roll');
+
+      const signH = dispH >= 0 ? '+' : '';
+      const signP = dispP >= 0 ? '+' : '';
+      if (valH) valH.textContent = `${signH}${dispH.toFixed(1)} m`;
+      if (valP) valP.textContent = `${signP}${dispP.toFixed(1)}°`;
+      if (valY) valY.textContent = `${dispY >= 0 ? '+' : ''}${Math.round(dispY)}°`;
+      if (valR) valR.textContent = `${dispR >= 0 ? '+' : ''}${dispR.toFixed(1)}°`;
+
+      if (sliderH && document.activeElement !== sliderH) sliderH.value = dispH.toFixed(1);
+      if (sliderP && document.activeElement !== sliderP) sliderP.value = dispP.toFixed(1);
+      if (sliderY && document.activeElement !== sliderY) sliderY.value = Math.round(dispY);
+      if (sliderR && document.activeElement !== sliderR) sliderR.value = dispR.toFixed(1);
+
+      if (summaryCam) {
+        summaryCam.textContent = `Alt ${signH}${dispH.toFixed(1)}m · ${signP}${Math.round(dispP)}°`;
+      }
+
+      // Update Gyroscope Artificial Horizon SVG Disc
+      const gyroDisc = document.getElementById('gyro-disc');
+      const gyroReadout = document.getElementById('gyro-readout');
+      if (gyroDisc) {
+        const pitchShiftPx = Math.max(-22, Math.min(22, dispP * 0.45));
+        gyroDisc.style.transform = `rotate(${-dispR}deg) translateY(${pitchShiftPx}px)`;
+      }
+      if (gyroReadout) {
+        gyroReadout.textContent = `${signP}${Math.round(dispP)}°`;
+      }
+    }
+
+    function setCameraMode(mode) {
+      cameraMode = mode;
+      updateCameraModeUI();
+    }
+
+    function updateCameraModeUI() {
+      const btnComb = document.getElementById('cam-mode-combined');
+      const btnMan = document.getElementById('cam-mode-manual');
+      const btnAuto = document.getElementById('cam-mode-auto');
+
+      const activeCls = 'py-1 px-1.5 rounded-lg text-[10px] font-medium transition cursor-pointer bg-amber-500/25 text-amber-200 border border-amber-400/35';
+      const inactiveCls = 'py-1 px-1.5 rounded-lg text-[10px] font-medium transition cursor-pointer text-white/60 hover:text-white bg-white/5';
+
+      if (btnComb) btnComb.className = cameraMode === 'combined' ? activeCls : inactiveCls;
+      if (btnMan) btnMan.className = cameraMode === 'manual' ? activeCls : inactiveCls;
+      if (btnAuto) btnAuto.className = cameraMode === 'auto' ? activeCls : inactiveCls;
+    }
+
+    function setCameraLens(mm, fovDeg) {
+      currentLensMM = mm;
+      targetCameraFOV = fovDeg;
+      const fovLabel = document.getElementById('val-cam-fov');
+      if (fovLabel) fovLabel.textContent = `${mm}mm (${fovDeg}°)`;
+
+      document.querySelectorAll('.lens-btn').forEach(btn => {
+        const btnMM = parseInt(btn.getAttribute('data-mm'), 10);
+        if (btnMM === mm) {
+          btn.className = 'lens-btn py-1 rounded-lg bg-amber-500/25 border border-amber-400/40 text-[10px] font-mono-tech text-amber-200 transition cursor-pointer';
+        } else {
+          btn.className = 'lens-btn py-1 rounded-lg bg-white/5 hover:bg-amber-500/20 border border-white/10 text-[10px] font-mono-tech text-white/80 transition cursor-pointer';
+        }
+      });
+    }
+
+    function resetCameraRig() {
+      cameraMode = 'combined';
+      userCamHeight = 7.2;
+      userCamPitch = -8.0;
+      userCamYaw = 0.0;
+      userCamRoll = 0.0;
+      setCameraLens(35, 58);
+      updateCameraModeUI();
+      updateCameraRigHUD();
+    }
+
+    function applyCameraPreset(presetName) {
+      setCameraMode('manual');
+      if (presetName === 'walo') {
+        // Dramatic 3/4 Starboard Bow view of OPV 58S WALO (matching reference photo)
+        jumpToStage(0);
+        userCamHeight = 5.4;
+        userCamPitch = -9.5;
+        userCamYaw = 8.0;
+        userCamRoll = 0.0;
+        setCameraLens(50, 42);
+      } else if (presetName === 'grazing') {
+        // Ultra-low wave-skimming angle
+        userCamHeight = 1.1;
+        userCamPitch = 3.5;
+        userCamYaw = 0;
+        userCamRoll = 0;
+        setCameraLens(24, 78);
+      } else if (presetName === 'horizon') {
+        // Balanced classic marine horizon
+        userCamHeight = 7.2;
+        userCamPitch = -8.0;
+        userCamYaw = 0;
+        userCamRoll = 0;
+        setCameraLens(35, 58);
+      } else if (presetName === 'high') {
+        // High panoramic overlook
+        userCamHeight = 24.0;
+        userCamPitch = -32.0;
+        userCamYaw = 18;
+        userCamRoll = 0;
+        setCameraLens(35, 58);
+      } else if (presetName === 'zenith') {
+        // Top-down satellite / zenith view
+        userCamHeight = 42.0;
+        userCamPitch = -78.0;
+        userCamYaw = 0;
+        userCamRoll = 0;
+        setCameraLens(50, 42);
+      } else if (presetName === 'dutch') {
+        // Dramatic cinema tilted roll
+        userCamHeight = 4.5;
+        userCamPitch = -5.0;
+        userCamYaw = -22;
+        userCamRoll = 18.0;
+        setCameraLens(24, 78);
+      } else if (presetName === 'core') {
+        // Aligned straight down the axis of the Particle Tube / Torus
+        userCamHeight = 0.0;
+        userCamPitch = 0.0;
+        userCamYaw = 0.0;
+        userCamRoll = 0.0;
+        setCameraLens(35, 58);
+      }
+      updateCameraRigHUD();
+    }
+
+    function toggleDoFEnabled() {
+      dofEnabled = !dofEnabled;
+      const btn = document.getElementById('dof-master-toggle');
+      const dot = document.getElementById('dof-status-dot');
+      if (dofEnabled) {
+        btn.textContent = 'ON';
+        btn.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-mono-tech uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 transition cursor-pointer';
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]';
+        triggerTransientPeaking();
+      } else {
+        btn.textContent = 'OFF';
+        btn.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-mono-tech uppercase tracking-wider bg-white/10 text-white/40 border border-white/15 transition cursor-pointer';
+        dot.className = 'w-2 h-2 rounded-full bg-white/30';
+      }
+      updateOpticsSummaryHUD();
+    }
+
+    function updateFocusModeUI() {
+      const btnManual = document.getElementById('mode-btn-manual');
+      const btnPointer = document.getElementById('mode-btn-pointer');
+      const btnAuto = document.getElementById('mode-btn-auto');
+      const hint = document.getElementById('dof-mode-hint');
+
+      const activeClass = 'py-1.5 px-2 rounded-lg text-[11px] font-medium transition cursor-pointer bg-cyan-500/25 text-cyan-200 border border-cyan-400/30';
+      const inactiveClass = 'py-1.5 px-2 rounded-lg text-[11px] font-medium transition cursor-pointer text-white/60 hover:text-white';
+
+      if (btnManual) btnManual.className = focusMode === 'manual' ? activeClass : inactiveClass;
+      if (btnPointer) btnPointer.className = focusMode === 'pointer' ? activeClass : inactiveClass;
+      if (btnAuto) btnAuto.className = focusMode === 'auto' ? activeClass : inactiveClass;
+
+      if (hint) {
+        if (focusMode === 'manual') hint.textContent = translations[currentLang].dof_hint_manual;
+        else if (focusMode === 'pointer') hint.textContent = translations[currentLang].dof_hint_click;
+        else hint.textContent = translations[currentLang].dof_hint_auto;
+      }
+    }
+
+    function setFocusMode(mode) {
+      focusMode = mode;
+      updateFocusModeUI();
+      triggerTransientPeaking();
+    }
+
+    function toggleFocusPeaking() {
+      const btn = document.getElementById('peaking-toggle-btn');
+      if (focusPeakingMode === 'auto') {
+        focusPeakingMode = 'on';
+        btn.textContent = 'ON';
+        btn.className = 'px-2.5 py-1 rounded-lg text-[10px] font-mono-tech uppercase bg-emerald-500/25 text-emerald-300 border border-emerald-400/40 transition cursor-pointer';
+      } else if (focusPeakingMode === 'on') {
+        focusPeakingMode = 'off';
+        btn.textContent = 'OFF';
+        btn.className = 'px-2.5 py-1 rounded-lg text-[10px] font-mono-tech uppercase bg-white/5 text-white/40 border border-white/10 transition cursor-pointer';
+      } else {
+        focusPeakingMode = 'auto';
+        btn.textContent = 'AUTO';
+        btn.className = 'px-2.5 py-1 rounded-lg text-[10px] font-mono-tech uppercase bg-white/5 hover:bg-white/10 text-white/60 border border-white/15 transition cursor-pointer';
+      }
+    }
+
+    function applyOpticalPreset(fStop, rangeMeters) {
+      if (!dofEnabled) toggleDoFEnabled();
+      currentFStop = fStop;
+      currentFocalRange = rangeMeters;
+      triggerTransientPeaking();
+      updateOpticsSummaryHUD();
+    }
+
+    let currentOceanMood = 0;
+    let autoTourEnabled = false;
+    let shockwaveStartTimestamp = -100.0;
+
+    function setOceanMood(moodIdx) {
+      currentOceanMood = moodIdx;
+      const moodNames = ['Abyssal Gold', 'Biolum Emerald', 'Solar Flare', 'Quantum Nebula'];
+      const label = document.getElementById('mood-name-label');
+      if (label) label.textContent = moodNames[moodIdx] || moodNames[0];
+
+      document.querySelectorAll('.mood-btn').forEach(btn => {
+        const idx = parseInt(btn.getAttribute('data-mood'), 10);
+        if (idx === moodIdx) {
+          btn.className = 'mood-btn py-1 rounded-lg bg-cyan-500/25 border border-cyan-400/40 text-[10px] font-mono-tech text-cyan-200 transition cursor-pointer';
+        } else {
+          btn.className = 'mood-btn py-1 rounded-lg bg-white/5 hover:bg-cyan-500/20 border border-white/10 text-[10px] font-mono-tech text-white/75 transition cursor-pointer';
+        }
+      });
+    }
+
+    function toggleAutoTour() {
+      autoTourEnabled = !autoTourEnabled;
+      const dot = document.getElementById('autotour-dot');
+      const btn = document.getElementById('autotour-btn');
+      if (autoTourEnabled) {
+        if (dot) dot.className = 'w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping';
+        if (btn) btn.className = 'hidden sm:flex items-center gap-1.5 glass-pill px-3 py-1.5 rounded-full text-[11px] font-mono-tech text-cyan-200 border border-cyan-400/60 bg-cyan-500/20 transition cursor-pointer';
+      } else {
+        if (dot) dot.className = 'w-1.5 h-1.5 rounded-full bg-white/40';
+        if (btn) btn.className = 'hidden sm:flex items-center gap-1.5 glass-pill px-3 py-1.5 rounded-full text-[11px] font-mono-tech text-cyan-200 hover:border-cyan-400/50 transition cursor-pointer';
+      }
+    }
+
+    /* -------------------------------------------------------------------------
+       6. THREE.JS SCENE INITIALIZATION & EVENT LISTENERS
+       ------------------------------------------------------------------------- */
+    window.onload = function () {
+      const canvas = document.getElementById('webgl-canvas');
+      const atmosphereOverlay = document.getElementById('atmosphere-overlay');
+      const reticle = document.getElementById('focus-reticle');
+      const reticleDistLabel = document.getElementById('reticle-dist');
+
+      const scene = new THREE.Scene();
+
+      const camera = new THREE.PerspectiveCamera(
+        58,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        900
+      );
+      camera.rotation.order = 'YXZ'; // Yaw (Y) -> Pitch (X) -> Roll (Z)
+
+      const renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        antialias: true,
+        powerPreference: 'high-performance'
+      });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      const isMobileDevice = /iPhone|iPad|Android/i.test(navigator.userAgent);
+      const pixelRatio = Math.min(window.devicePixelRatio, isMobileDevice ? 1.5 : 2);
+      renderer.setPixelRatio(pixelRatio);
+      renderer.setClearColor(0x030305, 1);
+
+      const uniforms = {
+        uTime: { value: 0 },
+        uWaveAmp: { value: 1.0 },
+        uOceanOpacity: { value: 1.0 },
+        uScanlineGlow: { value: 0.0 },
+        uParticleOpacity: { value: 0.08 },
+        uFoldTube: { value: 0.0 },
+        uBendTorus: { value: 0.0 },
+        uGlowBoost: { value: 1.25 },
+        uPixelRatio: { value: pixelRatio },
+        uCameraPos: { value: new THREE.Vector3() },
+        uDofEnabled: { value: 1.0 },
+        uFocusDistance: { value: 27.0 },
+        uFocalRange: { value: 4.5 },
+        uAperture: { value: fStopToApertureStrength(2.2) },
+        uFocusPeaking: { value: 0.0 },
+        uShockwaveCenter: { value: new THREE.Vector2(0.0, 0.0) },
+        uShockwaveTime: { value: 99.0 },
+        uMoodPalette: { value: 0.0 },
+        uShipPos: { value: new THREE.Vector2(4.2, 8.8) },
+        uShipHeading: { value: -0.36 }
+      };
+
+      // OBJECT 1: HYPER-REALISTIC FULL-HORIZON GERSTNER OCEAN MESH
+      const oceanGeo = new THREE.PlaneGeometry(1, 1, 280, 280);
+      oceanGeo.rotateX(-Math.PI / 2);
+
+      const oceanMat = new THREE.ShaderMaterial({
+        vertexShader: oceanVertexShader,
+        fragmentShader: oceanFragmentShader,
+        uniforms: uniforms,
+        transparent: true,
+        depthWrite: true,
+        side: THREE.DoubleSide
+      });
+
+      const oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
+      oceanMesh.frustumCulled = false;
+      scene.add(oceanMesh);
+
+      // OBJECT 2: 78,400-PARTICLE FULL-HORIZON METAMORPHOSIS SYSTEM (280 x 280 GRID)
+      const GRID_U = 280;
+      const GRID_V = 280;
+      const PARTICLE_COUNT = GRID_U * GRID_V;
+
+      const dummyPositions = new Float32Array(PARTICLE_COUNT * 3);
+      const gridUVs = new Float32Array(PARTICLE_COUNT * 2);
+      const randomSeeds = new Float32Array(PARTICLE_COUNT);
+
+      let ptr3 = 0;
+      let ptr2 = 0;
+      for (let iv = 0; iv < GRID_V; iv++) {
+        const v = iv / (GRID_V - 1);
+        for (let iu = 0; iu < GRID_U; iu++) {
+          const u = iu / (GRID_U - 1);
+          dummyPositions[ptr3++] = 0;
+          dummyPositions[ptr3++] = 0;
+          dummyPositions[ptr3++] = 0;
+          gridUVs[ptr2++] = u;
+          gridUVs[ptr2++] = v;
+          const idx = iv * GRID_U + iu;
+          randomSeeds[idx] = ((idx * 16807) % 2147483647) / 2147483647;
+        }
+      }
+
+      const particleGeo = new THREE.BufferGeometry();
+      particleGeo.setAttribute('position', new THREE.BufferAttribute(dummyPositions, 3));
+      particleGeo.setAttribute('aGridUV', new THREE.BufferAttribute(gridUVs, 2));
+      particleGeo.setAttribute('aRandom', new THREE.BufferAttribute(randomSeeds, 1));
+
+      const particleMat = new THREE.ShaderMaterial({
+        vertexShader: particleVertexShader,
+        fragmentShader: particleFragmentShader,
+        uniforms: uniforms,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+
+      const particleSystem = new THREE.Points(particleGeo, particleMat);
+      particleSystem.frustumCulled = false;
+      scene.add(particleSystem);
+
+      // OBJECT 3: DEEP SPACE BOKEH STARFIELD (FULL HORIZON DOME)
+      const starCount = 2200;
+      const starPos = new Float32Array(starCount * 3);
+      for (let i = 0; i < starCount; i++) {
+        starPos[i * 3]     = (Math.random() - 0.5) * 520;
+        starPos[i * 3 + 1] = (Math.random() - 0.5) * 240;
+        starPos[i * 3 + 2] = (Math.random() - 0.5) * 420 - 60;
+      }
+      const starGeo = new THREE.BufferGeometry();
+      starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+      const starMat = new THREE.PointsMaterial({
+        color: 0x94a3b8,
+        size: 0.22,
+        transparent: true,
+        opacity: 0.35,
+        depthWrite: false
+      });
+      const starField = new THREE.Points(starGeo, starMat);
+      scene.add(starField);
+
+      // OBJECT 4: OPV 58S "WALO" OFFSHORE PATROL VESSEL (3D REPLICA FROM REFERENCE PHOTO)
+      const hemiLight = new THREE.HemisphereLight(0xa5d8ff, 0x07192e, 1.35);
+      scene.add(hemiLight);
+
+      const sunLight = new THREE.DirectionalLight(0xfff4e0, 2.25);
+      sunLight.position.set(28, 52, 36);
+      scene.add(sunLight);
+
+      const rimLight = new THREE.DirectionalLight(0x38bdf8, 1.15);
+      rimLight.position.set(-32, 18, -28);
+      scene.add(rimLight);
+
+      function createWaloNameplateTexture() {
+        const c = document.createElement('canvas');
+        c.width = 512;
+        c.height = 128;
+        const ctx = c.getContext('2d');
+        ctx.clearRect(0, 0, 512, 128);
+        ctx.font = '800 58px "Inter", Arial, sans-serif';
+        ctx.fillStyle = '#181e26';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('WALO', 256, 64);
+        return new THREE.CanvasTexture(c);
+      }
+
+      function createHullPlatingTexture() {
+        const c = document.createElement('canvas');
+        c.width = 512;
+        c.height = 256;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#808080';
+        ctx.fillRect(0, 0, 512, 256);
+        // Subtle vertical frame ribs & horizontal strake weld seams
+        ctx.strokeStyle = '#929292';
+        ctx.lineWidth = 1;
+        for (let x = 0; x < 512; x += 16) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, 256);
+          ctx.stroke();
+        }
+        ctx.strokeStyle = '#707070';
+        for (let y = 0; y < 256; y += 32) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(512, y);
+          ctx.stroke();
+        }
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(4, 2);
+        return tex;
+      }
+
+      function createOPV58Walo() {
+        const shipGroup = new THREE.Group();
+        const platingBump = createHullPlatingTexture();
+
+        // High-Fidelity Naval Stealth Materials matching reference photo
+        const matHullGrey = new THREE.MeshStandardMaterial({
+          color: 0x7b8794,
+          roughness: 0.42,
+          metalness: 0.30,
+          bumpMap: platingBump,
+          bumpScale: 0.012,
+          side: THREE.DoubleSide
+        });
+        const matSuperGrey = new THREE.MeshStandardMaterial({
+          color: 0x8e9aa8,
+          roughness: 0.36,
+          metalness: 0.26,
+          bumpMap: platingBump,
+          bumpScale: 0.006,
+          side: THREE.DoubleSide
+        });
+        const matSuperLight = new THREE.MeshStandardMaterial({
+          color: 0xa6b2be,
+          roughness: 0.32,
+          metalness: 0.24,
+          side: THREE.DoubleSide
+        });
+        const matBootBlack = new THREE.MeshStandardMaterial({
+          color: 0x11151c,
+          roughness: 0.48,
+          metalness: 0.22,
+          side: THREE.DoubleSide
+        });
+        const matDeckDark = new THREE.MeshStandardMaterial({
+          color: 0x2b3139,
+          roughness: 0.85,
+          metalness: 0.14,
+          side: THREE.DoubleSide
+        });
+        const matBridgeGlass = new THREE.MeshStandardMaterial({
+          color: 0x05101a,
+          roughness: 0.08,
+          metalness: 0.94,
+          emissive: 0x072f49,
+          emissiveIntensity: 0.42
+        });
+        const matDarkSteel = new THREE.MeshStandardMaterial({ color: 0x1e242c, roughness: 0.45, metalness: 0.72 });
+        const matBrightSteel = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.25, metalness: 0.85 });
+        const matRadomeWhite = new THREE.MeshStandardMaterial({ color: 0xf4f7fb, roughness: 0.22, metalness: 0.08 });
+        const matOrangeFloat = new THREE.MeshStandardMaterial({ color: 0xea580c, roughness: 0.35, metalness: 0.10 });
+
+        // Holographic Scanline & Opacity support on all solid ship materials for Stage 1 -> Stage 2 transition
+        const solidMaterials = [
+          matHullGrey, matSuperGrey, matSuperLight, matBootBlack, matDeckDark,
+          matBridgeGlass, matDarkSteel, matBrightSteel, matRadomeWhite, matOrangeFloat
+        ];
+        solidMaterials.forEach((m) => {
+          m.transparent = true;
+        });
+
+        // =====================================================================
+        // 1. HIGH-DENSITY PARAMETRIC LOFTED MONOHULL (96 STATIONS × 26 WATERLINES)
+        // =====================================================================
+        const NUM_X = 96;
+        const NUM_V = 26;
+        const L_HALF = 9.1; // Total length 18.2m (representing 58m OPV)
+
+        function evalHullProfile(u) {
+          // u in [0 (stern -9.1) .. 1 (bow +9.1)]
+          const x = (u - 0.5) * 2.0 * L_HALF;
+
+          // Sheer line height (forecastle raised forward, step down to aft deck)
+          const sheerStep = 1.0 / (1.0 + Math.exp(-(u - 0.22) * 18.0));
+          const bowRise = Math.pow(Math.max(0, (u - 0.55) / 0.45), 1.65) * 0.56;
+          const yDeck = 1.04 + sheerStep * 0.46 + bowRise;
+
+          // Chine knuckle line (runs from bow stem down toward midships/aft)
+          const yChine = 0.42 + sheerStep * 0.26 + Math.pow(Math.max(0, (u - 0.45) / 0.55), 1.4) * 0.52;
+
+          // Keel / bottom line with raked stem cut-up
+          const stemCut = Math.pow(Math.max(0, (u - 0.82) / 0.18), 2.1) * 0.42;
+          const yBot = -0.68 + stemCut;
+
+          // Half-breadth (Beam) envelopes: Deck, Chine, and Waterline/Bottom
+          let beamEnv;
+          if (u < 0.48) {
+            beamEnv = 0.84 + 0.16 * Math.sin((u / 0.48) * (Math.PI * 0.5));
+          } else {
+            const tBow = (u - 0.48) / 0.52;
+            beamEnv = Math.cos(tBow * (Math.PI * 0.5));
+            beamEnv = Math.pow(Math.max(0, beamEnv), 0.82);
+          }
+
+          const zDeck = 1.66 * beamEnv;
+          const zChine = 1.56 * Math.pow(beamEnv, 1.08);
+          const zBot = 1.18 * Math.pow(beamEnv, 1.45) * (1.0 - Math.pow(Math.max(0, (u - 0.72) / 0.28), 1.5));
+
+          return { u, x, yBot, yChine, yDeck, zBot, zChine, zDeck };
+        }
+
+        function sampleHullPoint(st, vFrac, sideSign) {
+          // vFrac in [0 (keel) .. 1 (sheer bulwark)]
+          // Split at vFrac = 0.58 for crisp stealth chine knuckle
+          const chineV = 0.58;
+          let y, z;
+          if (vFrac <= chineV) {
+            const t = vFrac / chineV;
+            // Smooth deadrise + bilge turn curvature below chine
+            y = st.yBot + (st.yChine - st.yBot) * Math.pow(t, 0.88);
+            const bilgeCurve = Math.sin(t * Math.PI * 0.5);
+            z = st.zBot * (0.15 + 0.85 * bilgeCurve) + (st.zChine - st.zBot) * Math.pow(t, 1.15);
+          } else {
+            const t = (vFrac - chineV) / (1.0 - chineV);
+            // Concave bow flare / flat stealth topsides above chine
+            y = st.yChine + (st.yDeck - st.yChine) * t;
+            const flare = st.u > 0.55 ? Math.pow(t, 1.35) : t;
+            z = st.zChine + (st.zDeck - st.zChine) * flare;
+          }
+          return [st.x, y, z * sideSign];
+        }
+
+        const hullProfiles = [];
+        for (let i = 0; i <= NUM_X; i++) {
+          hullProfiles.push(evalHullProfile(i / NUM_X));
+        }
+
+        const lowerHullVerts = [];
+        const upperHullVerts = [];
+        const bootBandVerts = [];
+        const deckVerts = [];
+        const bulwarkVerts = [];
+
+        function pushTriQuad(arr, p1, p2, p3, p4) {
+          arr.push(...p1, ...p2, ...p3, ...p1, ...p3, ...p4);
+        }
+
+        const CHINE_IDX = Math.round(NUM_V * 0.58);
+
+        for (let i = 0; i < NUM_X; i++) {
+          const s0 = hullProfiles[i];
+          const s1 = hullProfiles[i + 1];
+
+          for (let j = 0; j < NUM_V; j++) {
+            const v0 = j / NUM_V;
+            const v1 = (j + 1) / NUM_V;
+            const targetArr = j < CHINE_IDX ? lowerHullVerts : upperHullVerts;
+
+            // Starboard (+1)
+            const p00R = sampleHullPoint(s0, v0, 1);
+            const p10R = sampleHullPoint(s1, v0, 1);
+            const p11R = sampleHullPoint(s1, v1, 1);
+            const p01R = sampleHullPoint(s0, v1, 1);
+            pushTriQuad(targetArr, p00R, p10R, p11R, p01R);
+
+            // Port (-1)
+            const p00L = sampleHullPoint(s0, v0, -1);
+            const p10L = sampleHullPoint(s1, v0, -1);
+            const p11L = sampleHullPoint(s1, v1, -1);
+            const p01L = sampleHullPoint(s0, v1, -1);
+            pushTriQuad(targetArr, p10L, p00L, p01L, p11L);
+
+            // Contoured black waterline boot-topping band around v in [0.22 .. 0.42]
+            if (j >= 5 && j <= 10) {
+              const b00R = [p00R[0], p00R[1], p00R[2] + 0.012];
+              const b10R = [p10R[0], p10R[1], p10R[2] + 0.012];
+              const b11R = [p11R[0], p11R[1], p11R[2] + 0.012];
+              const b01R = [p01R[0], p01R[1], p01R[2] + 0.012];
+              pushTriQuad(bootBandVerts, b00R, b10R, b11R, b01R);
+
+              const b00L = [p00L[0], p00L[1], p00L[2] - 0.012];
+              const b10L = [p10L[0], p10L[1], p10L[2] - 0.012];
+              const b11L = [p11L[0], p11L[1], p11L[2] - 0.012];
+              const b01L = [p01L[0], p01L[1], p01L[2] - 0.012];
+              pushTriQuad(bootBandVerts, b10L, b00L, b01L, b11L);
+            }
+          }
+
+          // Weather Deck Surface (cambered slightly in center)
+          const cam0 = s0.yDeck + 0.04;
+          const cam1 = s1.yDeck + 0.04;
+          pushTriQuad(deckVerts,
+            [s0.x, s0.yDeck, s0.zDeck], [s1.x, s1.yDeck, s1.zDeck],
+            [s1.x, cam1, 0], [s0.x, cam0, 0]
+          );
+          pushTriQuad(deckVerts,
+            [s1.x, s1.yDeck, -s1.zDeck], [s0.x, s0.yDeck, -s0.zDeck],
+            [s0.x, cam0, 0], [s1.x, cam1, 0]
+          );
+
+          // Raised Bow Bulwark Coaming Lip (u > 0.52)
+          if (s0.u > 0.52) {
+            const bwH = 0.22 * ((s0.u - 0.52) / 0.48);
+            pushTriQuad(bulwarkVerts,
+              [s0.x, s0.yDeck, s0.zDeck], [s1.x, s1.yDeck, s1.zDeck],
+              [s1.x, s1.yDeck + bwH, s1.zDeck * 0.99], [s0.x, s0.yDeck + bwH, s0.zDeck * 0.99]
+            );
+            pushTriQuad(bulwarkVerts,
+              [s1.x, s1.yDeck, -s1.zDeck], [s0.x, s0.yDeck, -s0.zDeck],
+              [s0.x, s0.yDeck + bwH, -s0.zDeck * 0.99], [s1.x, s1.yDeck + bwH, -s1.zDeck * 0.99]
+            );
+          }
+        }
+
+        // High-resolution Transom Stern with Stern Ramp Recess
+        const st0 = hullProfiles[0];
+        for (let k = 0; k < 12; k++) {
+          const zA = -st0.zDeck + (k / 12) * (2 * st0.zDeck);
+          const zB = -st0.zDeck + ((k + 1) / 12) * (2 * st0.zDeck);
+          pushTriQuad(upperHullVerts,
+            [st0.x, st0.yBot, zA], [st0.x, st0.yBot, zB],
+            [st0.x, st0.yDeck, zB], [st0.x, st0.yDeck, zA]
+          );
+        }
+
+        function addVertsMesh(verts, mat) {
+          const g = new THREE.BufferGeometry();
+          g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+          g.computeVertexNormals();
+          const m = new THREE.Mesh(g, mat);
+          shipGroup.add(m);
+          return m;
+        }
+
+        // Split lower & upper hull at the chine so the stealth chine knuckle edge is razor-sharp!
+        addVertsMesh(lowerHullVerts, matHullGrey);
+        addVertsMesh(upperHullVerts, matHullGrey);
+        addVertsMesh(bulwarkVerts, matHullGrey);
+        addVertsMesh(bootBandVerts, matBootBlack);
+        addVertsMesh(deckVerts, matDeckDark);
+
+        // External Chine Rubbing Strake / Welded Rib along the chine knuckle
+        const chinePtsR = [];
+        const chinePtsL = [];
+        for (let i = 4; i <= NUM_X - 2; i += 2) {
+          const st = hullProfiles[i];
+          chinePtsR.push(new THREE.Vector3(st.x, st.yChine, st.zChine + 0.015));
+          chinePtsL.push(new THREE.Vector3(st.x, st.yChine, -st.zChine - 0.015));
+        }
+        const chineTubeR = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(chinePtsR), 48, 0.024, 8, false);
+        const chineTubeL = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(chinePtsL), 48, 0.024, 8, false);
+        shipGroup.add(new THREE.Mesh(chineTubeR, matSuperLight));
+        shipGroup.add(new THREE.Mesh(chineTubeL, matSuperLight));
+
+        // "WALO" Nameplate on Starboard & Port Stern Quarter
+        const waloTex = createWaloNameplateTexture();
+        const nameMat = new THREE.MeshBasicMaterial({ map: waloTex, transparent: true });
+        [1, -1].forEach((side) => {
+          const stName = evalHullProfile(0.13);
+          const namePlane = new THREE.Mesh(new THREE.PlaneGeometry(1.75, 0.44), nameMat);
+          namePlane.position.set(stName.x, stName.yChine + 0.34, side * (stName.zDeck - 0.04));
+          namePlane.rotation.y = side > 0 ? 0.04 : Math.PI - 0.04;
+          shipGroup.add(namePlane);
+        });
+
+        // Sculpted Bow Fairleads / Mooring Ports with Raised Steel Coaming Lips & Recessed Anchor Pocket
+        const holeDarkMat = new THREE.MeshBasicMaterial({ color: 0x090d14 });
+        [0.86, 0.80, 0.74].forEach((uPos, idx) => {
+          const stP = evalHullProfile(uPos);
+          const w = idx === 0 ? 0.38 : 0.26;
+          const h = idx === 0 ? 0.18 : 0.14;
+          [1, -1].forEach((side) => {
+            const zPos = stP.zDeck * 0.91;
+            const yPos = stP.yDeck - 0.24;
+            const coaming = new THREE.Mesh(new THREE.BoxGeometry(w + 0.06, h + 0.05, 0.08), matSuperLight);
+            coaming.position.set(stP.x, yPos, side * zPos);
+            coaming.rotation.y = side * (-0.34);
+            shipGroup.add(coaming);
+
+            const recess = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.10), holeDarkMat);
+            recess.position.set(stP.x, yPos, side * zPos);
+            recess.rotation.y = side * (-0.34);
+            shipGroup.add(recess);
+          });
+        });
+
+        // Recessed Starboard Anchor & Hawsepipe near Bow (u = 0.90)
+        const stAnc = evalHullProfile(0.90);
+        const anchorPocket = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.34, 0.12), holeDarkMat);
+        anchorPocket.position.set(stAnc.x, stAnc.yChine + 0.22, stAnc.zChine * 0.88);
+        anchorPocket.rotation.y = -0.42;
+        shipGroup.add(anchorPocket);
+        const anchorFluke = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.32, 4), matBrightSteel);
+        anchorFluke.position.set(stAnc.x, stAnc.yChine + 0.20, stAnc.zChine * 0.93);
+        anchorFluke.rotation.z = 0.5;
+        shipGroup.add(anchorFluke);
+
+        // Hull Portholes with Raised Steel Bezels along Midships (matching reference photo)
+        [-2.2, -1.1, -0.5, 0.2, 1.4, 2.3, 3.2].forEach((px) => {
+          const uP = (px / (2 * L_HALF)) + 0.5;
+          const stP = evalHullProfile(uP);
+          [1, -1].forEach((side) => {
+            const bezel = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.06, 16), matSuperLight);
+            bezel.rotation.x = Math.PI / 2;
+            bezel.position.set(px, stP.yChine + 0.26, side * (stP.zChine + 0.02));
+            shipGroup.add(bezel);
+
+            const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.07, 16), holeDarkMat);
+            glass.rotation.x = Math.PI / 2;
+            glass.position.set(px, stP.yChine + 0.26, side * (stP.zChine + 0.02));
+            shipGroup.add(glass);
+          });
+        });
+
+        // =====================================================================
+        // 2. FOREDECK EQUIPMENT & 14-FACET 76MM OTO MELARA SUPER RAPIDO TURRET
+        // =====================================================================
+        // Twin Anchor Windlasses, Chain Stoppers & Mooring Bollards on Foredeck
+        [-0.38, 0.38].forEach((wz) => {
+          const windlass = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.28, 16), matDarkSteel);
+          windlass.position.set(6.85, 1.98, wz);
+          shipGroup.add(windlass);
+
+          const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.12, 16), matBrightSteel);
+          drum.position.set(6.85, 2.12, wz);
+          shipGroup.add(drum);
+        });
+
+        // V-Shaped Wave Breakwater Shield on Foredeck ahead of 76mm Gun
+        [-1, 1].forEach((side) => {
+          const bwWing = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.26, 0.06), matSuperGrey);
+          bwWing.position.set(6.05, 1.90, side * 0.46);
+          bwWing.rotation.y = side * 0.48;
+          shipGroup.add(bwWing);
+        });
+
+        // Twin Mooring Bitt Bollards along Foredeck & Quarterdeck
+        [-8.1, -6.2, -4.4, 3.8, 5.6, 7.2].forEach((bx) => {
+          const uB = (bx / (2 * L_HALF)) + 0.5;
+          const stB = evalHullProfile(uB);
+          [-1, 1].forEach((side) => {
+            const bittBase = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.05, 0.14), matDarkSteel);
+            bittBase.position.set(bx, stB.yDeck + 0.02, side * (stB.zDeck - 0.18));
+            shipGroup.add(bittBase);
+            [-0.08, 0.08].forEach((dx) => {
+              const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.18, 10), matDarkSteel);
+              post.position.set(bx + dx, stB.yDeck + 0.10, side * (stB.zDeck - 0.18));
+              shipGroup.add(post);
+            });
+          });
+        });
+
+        // Authentic Faceted 76mm OTO Melara Super Rapido Stealth Turret
+        const gunGroup = new THREE.Group();
+        gunGroup.position.set(4.65, 1.72, 0);
+
+        // Turret Bolted Barbette Ring
+        const barbette = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.74, 0.24, 32), matSuperGrey);
+        barbette.position.y = 0.12;
+        gunGroup.add(barbette);
+
+        // Custom Multi-Plane Stealth Cupola (Sloped Glacis, Angled Cheeks, Flat Roof & Rear Bustle)
+        const cV = [];
+        const bR = [
+          [-0.78, 0.22, -0.52], [0.22, 0.22, -0.64], [0.78, 0.22, -0.32],
+          [0.78, 0.22,  0.32], [0.22, 0.22,  0.64], [-0.78, 0.22,  0.52]
+        ];
+        const tR = [
+          [-0.52, 0.88, -0.32], [0.12, 0.88, -0.38], [0.46, 0.84, -0.20],
+          [0.46, 0.84,  0.20], [0.12, 0.88,  0.38], [-0.52, 0.88,  0.32]
+        ];
+        for (let k = 0; k < 6; k++) {
+          const nk = (k + 1) % 6;
+          pushTriQuad(cV, bR[k], bR[nk], tR[nk], tR[k]);
+        }
+        pushTriQuad(cV, tR[0], tR[1], tR[4], tR[5]);
+        pushTriQuad(cV, tR[1], tR[2], tR[3], tR[4]);
+        const cupolaGeo = new THREE.BufferGeometry();
+        cupolaGeo.setAttribute('position', new THREE.Float32BufferAttribute(cV, 3));
+        cupolaGeo.computeVertexNormals();
+        gunGroup.add(new THREE.Mesh(cupolaGeo, matSuperLight));
+
+        // Top commander access hatch on turret roof
+        const turretHatch = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.05, 16), matSuperGrey);
+        turretHatch.position.set(-0.18, 0.89, 0);
+        gunGroup.add(turretHatch);
+
+        // Dark Gun Elevation Slot & Ribbed Weather Boot Mantlet
+        const gunSlot = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.52, 0.24), matDarkSteel);
+        gunSlot.position.set(0.50, 0.52, 0);
+        gunGroup.add(gunSlot);
+
+        const mantletDrum = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.26, 16), matDarkSteel);
+        mantletDrum.rotation.x = Math.PI / 2;
+        mantletDrum.position.set(0.62, 0.54, 0);
+        gunGroup.add(mantletDrum);
+
+        // Multi-stage 76mm/62 Barrel (Water Cooling Jacket, Bore Evacuator, Tapered Tube & Muzzle Brake)
+        const barrelGroup = new THREE.Group();
+        barrelGroup.position.set(0.65, 0.55, 0);
+        barrelGroup.rotation.z = 0.09; // Slight elevation
+
+        const jacket = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.105, 0.65, 16), matSuperLight);
+        jacket.rotation.z = -Math.PI / 2;
+        jacket.position.x = 0.32;
+        barrelGroup.add(jacket);
+
+        const fumeExtractor = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.095, 0.22, 16), matSuperGrey);
+        fumeExtractor.rotation.z = -Math.PI / 2;
+        fumeExtractor.position.x = 0.72;
+        barrelGroup.add(fumeExtractor);
+
+        const mainTube = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.068, 1.25, 16), matSuperLight);
+        mainTube.rotation.z = -Math.PI / 2;
+        mainTube.position.x = 1.38;
+        barrelGroup.add(mainTube);
+
+        const muzzleBrake = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.052, 0.14, 16), matDarkSteel);
+        muzzleBrake.rotation.z = -Math.PI / 2;
+        muzzleBrake.position.x = 2.02;
+        barrelGroup.add(muzzleBrake);
+
+        gunGroup.add(barrelGroup);
+        shipGroup.add(gunGroup);
+
+        // Detailed Bow Jackstaff with Navigation Light & Guy Wires
+        const jackstaff = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.038, 1.55, 12), matBrightSteel);
+        jackstaff.position.set(8.85, 2.78, 0);
+        shipGroup.add(jackstaff);
+
+        // =====================================================================
+        // 3. FACETED STEALTH SUPERSTRUCTURE, STAIRWELL & PANORAMIC 360° BRIDGE
+        // =====================================================================
+        // Forward Faceted Stealth Deckhouse (with sloped tumblehome side walls & angled front glacis)
+        const superVerts = [];
+        // Lower forward block from x = -0.2 to +3.15, sloping inward from z = ±1.46 at deck to ±1.28 at bridge floor
+        const sfB = [
+          [-0.20, 1.38, -1.48], [2.45, 1.48, -1.44], [3.15, 1.54, -1.08],
+          [3.15, 1.54,  1.08], [2.45, 1.48,  1.44], [-0.20, 1.38,  1.48]
+        ];
+        const sfT = [
+          [-0.20, 2.48, -1.32], [2.15, 2.48, -1.26], [2.72, 2.48, -0.92],
+          [2.72, 2.48,  0.92], [2.15, 2.48,  1.26], [-0.20, 2.48,  1.32]
+        ];
+        for (let k = 0; k < 6; k++) {
+          const nk = (k + 1) % 6;
+          pushTriQuad(superVerts, sfB[k], sfB[nk], sfT[nk], sfT[k]);
+        }
+        pushTriQuad(superVerts, sfT[0], sfT[1], sfT[4], sfT[5]);
+        pushTriQuad(superVerts, sfT[1], sfT[2], sfT[3], sfT[4]);
+
+        // Main Aft Superstructure Block (from x = -3.95 to -0.15 with stealth tumblehome sides)
+        const saB = [
+          [-3.95, 1.15, -1.46], [-0.15, 1.38, -1.48],
+          [-0.15, 1.38,  1.48], [-3.95, 1.15,  1.46]
+        ];
+        const saT = [
+          [-3.75, 2.52, -1.30], [-0.15, 2.52, -1.34],
+          [-0.15, 2.52,  1.34], [-3.75, 2.52,  1.30]
+        ];
+        for (let k = 0; k < 4; k++) {
+          const nk = (k + 1) % 4;
+          pushTriQuad(superVerts, saB[k], saB[nk], saT[nk], saT[k]);
+        }
+        pushTriQuad(superVerts, saT[0], saT[1], saT[2], saT[3]);
+        addVertsMesh(superVerts, matSuperLight);
+
+        // Starboard External Companionway Staircase with 10 Individual Treads & Twin Handrails (visible in photo!)
+        const stairGroup = new THREE.Group();
+        stairGroup.position.set(2.58, 1.52, 1.18);
+        for (let s = 0; s < 10; s++) {
+          const frac = s / 9;
+          const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.025, 0.34), matBrightSteel);
+          stepMesh.position.set(-frac * 0.72, frac * 0.94, 0);
+          stairGroup.add(stepMesh);
+        }
+        [-0.16, 0.16].forEach((rz) => {
+          const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 1.24, 8), matBrightSteel);
+          rail.position.set(-0.36, 0.56, rz);
+          rail.rotation.z = -0.68;
+          stairGroup.add(rail);
+        });
+        shipGroup.add(stairGroup);
+
+        // Watertight Doors, Louvered Ventilation Grilles, Lifebuoys & Orange Fenders along Superstructure
+        [-0.85, -2.45].forEach((dx) => {
+          const door = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.78, 0.06), matSuperGrey);
+          door.position.set(dx, 1.72, 1.44);
+          shipGroup.add(door);
+        });
+        [-1.55, -3.15].forEach((gx) => {
+          const louver = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.38, 0.06), matDarkSteel);
+          louver.position.set(gx, 2.05, 1.38);
+          shipGroup.add(louver);
+        });
+
+        // Orange Spherical Mooring Fenders & Lifebuoy Rings (exact placement from reference photo)
+        [2.05, 1.48, -6.35, -7.15].forEach((fx) => {
+          const uF = (fx / (2 * L_HALF)) + 0.5;
+          const stF = evalHullProfile(uF);
+          const buoy = new THREE.Mesh(new THREE.SphereGeometry(0.145, 18, 18), matOrangeFloat);
+          buoy.position.set(fx, stF.yDeck + 0.14, stF.zDeck - 0.06);
+          shipGroup.add(buoy);
+        });
+
+        const ringLife = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.038, 12, 24), matOrangeFloat);
+        ringLife.position.set(2.22, 1.92, 1.38);
+        shipGroup.add(ringLife);
+
+        // 7-Plane Polygonal 360° Panoramic Command Bridge (Outward-Raked Anti-Glare Windows!)
+        const bridgeGroup = new THREE.Group();
+        bridgeGroup.position.set(0.55, 2.48, 0);
+
+        // Flared Bridge Sill Coaming & Bridge Wings
+        const bridgeSillVerts = [];
+        const bsB = [
+          [-1.35, 0.00, -1.42], [0.85, 0.00, -1.48], [1.45, 0.00, -0.82],
+          [1.45, 0.00,  0.82], [0.85, 0.00,  1.48], [-1.35, 0.00,  1.42]
+        ];
+        const bsT = [
+          [-1.35, 0.36, -1.46], [0.92, 0.36, -1.52], [1.54, 0.36, -0.86],
+          [1.54, 0.36,  0.86], [0.92, 0.36,  1.52], [-1.35, 0.36,  1.46]
+        ];
+        // Outward-raked window top brow (forward rake for anti-glare reflection)
+        const bwT = [
+          [-1.32, 0.86, -1.42], [1.04, 0.86, -1.56], [1.72, 0.86, -0.90],
+          [1.72, 0.86,  0.90], [1.04, 0.86,  1.56], [-1.32, 0.86,  1.42]
+        ];
+        const glassVerts = [];
+        for (let k = 0; k < 6; k++) {
+          const nk = (k + 1) % 6;
+          pushTriQuad(bridgeSillVerts, bsB[k], bsB[nk], bsT[nk], bsT[k]);
+          pushTriQuad(glassVerts, bsT[k], bsT[nk], bwT[nk], bwT[k]);
+        }
+
+        // Overhanging Sun-Visor Roof Brow
+        const brT = [
+          [-1.38, 1.04, -1.46], [1.10, 1.04, -1.62], [1.82, 1.04, -0.94],
+          [1.82, 1.04,  0.94], [1.10, 1.04,  1.62], [-1.38, 1.04,  1.46]
+        ];
+        for (let k = 0; k < 6; k++) {
+          const nk = (k + 1) % 6;
+          pushTriQuad(bridgeSillVerts, bwT[k], bwT[nk], brT[nk], brT[k]);
+        }
+        pushTriQuad(bridgeSillVerts, brT[0], brT[1], brT[4], brT[5]);
+        pushTriQuad(bridgeSillVerts, brT[1], brT[2], brT[3], brT[4]);
+
+        const bsGeo = new THREE.BufferGeometry();
+        bsGeo.setAttribute('position', new THREE.Float32BufferAttribute(bridgeSillVerts, 3));
+        bsGeo.computeVertexNormals();
+        bridgeGroup.add(new THREE.Mesh(bsGeo, matSuperLight));
+
+        const bgGeo = new THREE.BufferGeometry();
+        bgGeo.setAttribute('position', new THREE.Float32BufferAttribute(glassVerts, 3));
+        bgGeo.computeVertexNormals();
+        bridgeGroup.add(new THREE.Mesh(bgGeo, matBridgeGlass));
+
+        // Bridge Window Mullions & Individual Windshield Wipers
+        for (let k = 0; k < 6; k++) {
+          const nk = (k + 1) % 6;
+          const segs = k === 2 ? 5 : 4;
+          for (let s = 0; s <= segs; s++) {
+            const t = s / segs;
+            const bx = bsT[k][0] + (bsT[nk][0] - bsT[k][0]) * t;
+            const bz = bsT[k][2] + (bsT[nk][2] - bsT[k][2]) * t;
+            const tx = bwT[k][0] + (bwT[nk][0] - bwT[k][0]) * t;
+            const tz = bwT[k][2] + (bwT[nk][2] - bwT[k][2]) * t;
+            const post = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.54, 8), matSuperLight);
+            post.position.set((bx + tx) * 0.5, 0.61, (bz + tz) * 0.5);
+            bridgeGroup.add(post);
+
+            // Pantograph Windshield Wiper on each pane
+            if (s < segs && (k === 1 || k === 2 || k === 3)) {
+              const tMid = (s + 0.5) / segs;
+              const wx = tx + (bwT[nk][0] - bwT[k][0]) * (0.5 / segs);
+              const wz = tz + (bwT[nk][2] - bwT[k][2]) * (0.5 / segs);
+              const wiper = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.24, 0.02), matDarkSteel);
+              wiper.position.set(wx + 0.01, 0.72, wz);
+              bridgeGroup.add(wiper);
+            }
+          }
+        }
+
+        // Glowing Internal Bridge Helm & ECDIS Radar Consoles
+        const helmConsole = new THREE.Mesh(
+          new THREE.BoxGeometry(0.55, 0.32, 1.65),
+          new THREE.MeshStandardMaterial({ color: 0x0f172a, emissive: 0x38bdf8, emissiveIntensity: 0.75 })
+        );
+        helmConsole.position.set(0.95, 0.45, 0);
+        bridgeGroup.add(helmConsole);
+
+        // Starboard Green & Port Red Shrouded Navigation Lights on Bridge Wings
+        const navGreen = new THREE.Mesh(new THREE.SphereGeometry(0.065, 12, 12), new THREE.MeshBasicMaterial({ color: 0x10b981 }));
+        navGreen.position.set(0.65, 0.85, 1.58);
+        bridgeGroup.add(navGreen);
+
+        const navRed = new THREE.Mesh(new THREE.SphereGeometry(0.065, 12, 12), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+        navRed.position.set(0.65, 0.85, -1.58);
+        bridgeGroup.add(navRed);
+
+        shipGroup.add(bridgeGroup);
+
+        // =====================================================================
+        // 4. PYRAMIDAL MAST HOUSE, EOS DIRECTOR, SATCOM & HIGH-DETAIL LATTICE MAST
+        // =====================================================================
+        // Forward Pyramidal Pedestal + Lyncea Electro-Optical Director (EOS with twin lenses)
+        const eosPedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.52, 0.68, 4), matSuperLight);
+        eosPedestal.rotation.y = Math.PI / 4;
+        eosPedestal.position.set(1.18, 3.82, 0);
+        shipGroup.add(eosPedestal);
+
+        const eosYoke = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.18, 16), matDarkSteel);
+        eosYoke.position.set(1.18, 4.22, 0);
+        shipGroup.add(eosYoke);
+
+        const eosSphere = new THREE.Mesh(new THREE.SphereGeometry(0.19, 20, 20), matRadomeWhite);
+        eosSphere.position.set(1.18, 4.38, 0);
+        shipGroup.add(eosSphere);
+
+        const eosLens = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.12, 16), matBridgeGlass);
+        eosLens.rotation.z = Math.PI / 2;
+        eosLens.position.set(1.34, 4.38, 0);
+        shipGroup.add(eosLens);
+
+        // Twin White Satcom Radomes with Flanged Pedestals
+        [[0.22, 3.74, 0.78, 0.24], [-0.95, 3.68, -0.72, 0.19]].forEach(([sx, sy, sz, sr]) => {
+          const ped = new THREE.Mesh(new THREE.CylinderGeometry(sr * 0.55, sr * 0.75, 0.22, 16), matSuperLight);
+          ped.position.set(sx, sy - 0.14, sz);
+          shipGroup.add(ped);
+          const dome = new THREE.Mesh(new THREE.SphereGeometry(sr, 24, 24), matRadomeWhite);
+          dome.position.set(sx, sy + sr * 0.55, sz);
+          shipGroup.add(dome);
+        });
+
+        // Stepped Stealth Mast Base Pyramid
+        const mastBase = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.82, 1.18, 4), matSuperGrey);
+        mastBase.rotation.y = Math.PI / 4;
+        mastBase.position.set(-0.28, 3.98, 0);
+        shipGroup.add(mastBase);
+
+        // Tapered Main Pole Mast + Rear Waveguide Conduit Pipe
+        const mainMastPole = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.24, 4.45, 20), matSuperLight);
+        mainMastPole.position.set(-0.28, 6.45, 0);
+        shipGroup.add(mainMastPole);
+
+        const conduitPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.055, 4.1, 12), matDarkSteel);
+        conduitPipe.position.set(-0.44, 6.30, 0);
+        shipGroup.add(conduitPipe);
+
+        // Forward Radar Spur Platform + Rotating X-Band Navigation Radar Scanner
+        const radarSpur = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.08, 0.56), matSuperLight);
+        radarSpur.position.set(0.18, 4.62, 0);
+        shipGroup.add(radarSpur);
+
+        const radarStrut = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.58, 10), matSuperGrey);
+        radarStrut.position.set(0.12, 4.38, 0);
+        radarStrut.rotation.z = 0.52;
+        shipGroup.add(radarStrut);
+
+        const radarMotor = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.16, 16), matSuperGrey);
+        radarMotor.position.set(0.32, 4.72, 0);
+        shipGroup.add(radarMotor);
+
+        const radarSpinner = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.13, 1.48), matRadomeWhite);
+        radarSpinner.position.set(0.32, 4.85, 0);
+        shipGroup.add(radarSpinner);
+
+        // 3 Tiered Mast Yardarms with Diagonal Braces, EW Biconical Dipoles & Navigation Lights
+        [5.48, 6.42, 7.52].forEach((my, idx) => {
+          const span = 2.35 - idx * 0.52;
+          const yard = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.065, span), matSuperLight);
+          yard.position.set(-0.28, my, 0);
+          shipGroup.add(yard);
+
+          // Diagonal support struts under yardarm
+          [-1, 1].forEach((s) => {
+            const brace = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, span * 0.36, 8), matSuperGrey);
+            brace.position.set(-0.28, my - 0.18, s * span * 0.24);
+            brace.rotation.x = s * 0.92;
+            shipGroup.add(brace);
+          });
+
+          if (idx === 0) {
+            // Secondary Surface Surveillance Radar & Twin Biconical EW Sensors on Lower Yardarm
+            [-span * 0.48, span * 0.48].forEach((ez) => {
+              const ewLower = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.085, 1.05, 14), matSuperGrey);
+              ewLower.position.set(-0.28, my + 0.32, ez);
+              shipGroup.add(ewLower);
+              const ewTip = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 12), matRadomeWhite);
+              ewTip.position.set(-0.28, my + 0.92, ez);
+              shipGroup.add(ewTip);
+            });
+          } else if (idx === 1) {
+            // Red/White Warning VHF/UHF Whip Dipoles on Middle Yardarm
+            [-span * 0.46, span * 0.46].forEach((ez) => {
+              const vhfBase = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.42, 12), matOrangeFloat);
+              vhfBase.position.set(-0.28, my + 0.22, ez);
+              shipGroup.add(vhfBase);
+              const vhfWhip = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.022, 0.85, 8), matRadomeWhite);
+              vhfWhip.position.set(-0.28, my + 0.78, ez);
+              shipGroup.add(vhfWhip);
+            });
+          }
+        });
+
+        // Top ESM / TACAN Platform & Finial Spire (y = 7.95m to 8.85m)
+        const topDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.28, 0.10, 20), matDarkSteel);
+        topDisc.position.set(-0.28, 7.92, 0);
+        shipGroup.add(topDisc);
+
+        const topRadome = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.34, 16), matSuperGrey);
+        topRadome.position.set(-0.28, 8.12, 0);
+        shipGroup.add(topRadome);
+
+        const topSpire = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.045, 0.85, 12), matBrightSteel);
+        topSpire.position.set(-0.28, 8.62, 0);
+        shipGroup.add(topSpire);
+
+        // Signal Halyard & Fluttering Naval Pennant Flag
+        const flagMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.46, 0.24, 8, 4),
+          new THREE.MeshBasicMaterial({ color: 0xef4444, side: THREE.DoubleSide })
+        );
+        flagMesh.position.set(-0.48, 5.18, 0.48);
+        shipGroup.add(flagMesh);
+
+        // Long Starboard HF Whip Antenna rising from forward bridge deck
+        const whipAnt = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.026, 4.1, 10), matBrightSteel);
+        whipAnt.position.set(1.75, 5.15, 1.32);
+        whipAnt.rotation.z = -0.04;
+        shipGroup.add(whipAnt);
+
+        // =====================================================================
+        // 5. DETAILED ZODIAC HURRICANE COMMANDO RHIBS, DAVITS & AFT CRANE
+        // =====================================================================
+        [-1.18, 1.18].forEach((rz) => {
+          const rhibGroup = new THREE.Group();
+          rhibGroup.position.set(-2.25, 2.22, rz);
+
+          // Sculpted Inflatable Sponson Tube Collar
+          const sponson = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.13, 12, 24), matDarkSteel);
+          sponson.rotation.x = Math.PI / 2;
+          sponson.scale.set(2.45, 0.88, 1.0);
+          rhibGroup.add(sponson);
+
+          // RHIB Center Console, Windscreen & Twin Outboard Engines
+          const consoleBox = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.32, 0.28), matSuperGrey);
+          consoleBox.position.set(0.12, 0.18, 0);
+          rhibGroup.add(consoleBox);
+
+          const outboard = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.30, 0.34), matBootBlack);
+          outboard.position.set(-0.88, 0.12, 0);
+          rhibGroup.add(outboard);
+
+          // Launch Davit Arm above RHIB
+          const davitArm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.85, 0.16), matSuperLight);
+          davitArm.position.set(0.0, 0.42, rz > 0 ? -0.22 : 0.22);
+          davitArm.rotation.x = rz > 0 ? 0.35 : -0.35;
+          rhibGroup.add(davitArm);
+
+          shipGroup.add(rhibGroup);
+        });
+
+        // Twin Angled Stealth Exhaust Stacks with Louvered Soot Grilles
+        [-0.78, 0.78].forEach((ez) => {
+          const funnel = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.62, 0.38), matSuperGrey);
+          funnel.position.set(-3.45, 2.72, ez);
+          funnel.rotation.z = 0.18;
+          shipGroup.add(funnel);
+
+          const grille = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.12, 0.40), matBootBlack);
+          grille.position.set(-3.48, 2.98, ez);
+          shipGroup.add(grille);
+        });
+
+        // Aft Quarterdeck Winch / Mission Module House & Knuckle-Boom Deck Crane
+        const aftHouse = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.92, 1.72), matSuperGrey);
+        aftHouse.position.set(-5.05, 1.52, 0);
+        shipGroup.add(aftHouse);
+
+        const cranePedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.68, 16), matSuperLight);
+        cranePedestal.position.set(-4.85, 2.22, -0.35);
+        shipGroup.add(cranePedestal);
+
+        const craneBoom = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.14, 0.14), matSuperGrey);
+        craneBoom.position.set(-5.45, 2.52, -0.35);
+        craneBoom.rotation.z = 0.22;
+        shipGroup.add(craneBoom);
+
+        // =====================================================================
+        // 6. CONTINUOUS 3-TIER TUBULAR GUARDRAILS & STANCHIONS AROUND DECK
+        // =====================================================================
+        // Foredeck & Aft Deck Continuous Wire Guardrails
+        [
+          { iStart: 2, iEnd: 28 },  // Aft Quarterdeck
+          { iStart: 62, iEnd: 94 }  // Foredeck
+        ].forEach((seg) => {
+          [1, -1].forEach((side) => {
+            const topRailPts = [];
+            const midRailPts = [];
+            for (let i = seg.iStart; i <= seg.iEnd; i += 2) {
+              const st = hullProfiles[i];
+              const zR = side * (st.zDeck - 0.04);
+              topRailPts.push(new THREE.Vector3(st.x, st.yDeck + 0.36, zR));
+              midRailPts.push(new THREE.Vector3(st.x, st.yDeck + 0.19, zR));
+
+              if (i % 4 === 0) {
+                const stanchion = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.38, 6), matBrightSteel);
+                stanchion.position.set(st.x, st.yDeck + 0.19, zR);
+                shipGroup.add(stanchion);
+              }
+            }
+            const topTube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(topRailPts), 24, 0.012, 6, false);
+            const midTube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(midRailPts), 24, 0.009, 6, false);
+            shipGroup.add(new THREE.Mesh(topTube, matBrightSteel));
+            shipGroup.add(new THREE.Mesh(midTube, matBrightSteel));
+          });
+        });
+
+        // 7. 3D BOW SPRAY PARTICLE EMITTER (Dynamic water splash at the bow)
+        const sprayCount = 120;
+        const sprayPositions = new Float32Array(sprayCount * 3);
+        const sprayVels = [];
+        for (let i = 0; i < sprayCount; i++) {
+          sprayPositions[i * 3] = 8.2;
+          sprayPositions[i * 3 + 1] = 0.2;
+          sprayPositions[i * 3 + 2] = 0.0;
+          sprayVels.push({
+            life: Math.random(),
+            vx: -1.9 - Math.random() * 2.8,
+            vy: 1.7 + Math.random() * 3.1,
+            vz: (Math.random() - 0.5) * 4.2
+          });
+        }
+        const sprayGeo = new THREE.BufferGeometry();
+        sprayGeo.setAttribute('position', new THREE.BufferAttribute(sprayPositions, 3));
+        const sprayMat = new THREE.PointsMaterial({
+          color: 0xf0f9ff,
+          size: 0.44,
+          transparent: true,
+          opacity: 0.76,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending
+        });
+        const sprayPoints = new THREE.Points(sprayGeo, sprayMat);
+        shipGroup.add(sprayPoints);
+
+        // 8. GENERATE 24,000-POINT 3D POINT-MESH ("MAILLAGE DE POINTS") & HOLOGRAPHIC WIREFRAME OF THE SHIP
+        shipGroup.updateMatrixWorld(true);
+        const invGroupMat = new THREE.Matrix4().copy(shipGroup.matrixWorld).invert();
+        const collectedTris = [];
+        let totalArea = 0;
+
+        const vA = new THREE.Vector3();
+        const vB = new THREE.Vector3();
+        const vC = new THREE.Vector3();
+        const edge1 = new THREE.Vector3();
+        const edge2 = new THREE.Vector3();
+        const crossVec = new THREE.Vector3();
+
+        const edgeLinePositions = [];
+
+        shipGroup.traverse((child) => {
+          if (child.isMesh && child.geometry) {
+            const geom = child.geometry;
+            const posAttr = geom.attributes.position;
+            if (!posAttr) return;
+
+            const relMat = new THREE.Matrix4().multiplyMatrices(invGroupMat, child.matrixWorld);
+            const idxAttr = geom.index;
+            const triCount = idxAttr ? (idxAttr.count / 3) : (posAttr.count / 3);
+
+            // Color zone tag based on height / material (0: hull, 1: superstructure/bridge, 2: gun/mast/highlights)
+            let zoneTag = 0.2;
+            if (child.material === matBridgeGlass || child.material === matOrangeFloat) zoneTag = 0.95;
+            else if (child.material === matRadomeWhite || child.material === matBrightSteel) zoneTag = 0.80;
+            else if (child.material === matSuperLight || child.material === matSuperGrey) zoneTag = 0.55;
+
+            for (let t = 0; t < triCount; t++) {
+              const i0 = idxAttr ? idxAttr.getX(t * 3) : t * 3;
+              const i1 = idxAttr ? idxAttr.getX(t * 3 + 1) : t * 3 + 1;
+              const i2 = idxAttr ? idxAttr.getX(t * 3 + 2) : t * 3 + 2;
+
+              vA.fromBufferAttribute(posAttr, i0).applyMatrix4(relMat);
+              vB.fromBufferAttribute(posAttr, i1).applyMatrix4(relMat);
+              vC.fromBufferAttribute(posAttr, i2).applyMatrix4(relMat);
+
+              edge1.subVectors(vB, vA);
+              edge2.subVectors(vC, vA);
+              crossVec.crossVectors(edge1, edge2);
+              const area = 0.5 * crossVec.length();
+              if (area > 0.00001) {
+                // Boost sampling weight on fine details (mast, gun, railings, bridge) so small features are super crisp
+                const detailBoost = area < 0.08 ? 4.5 : (area < 0.25 ? 2.2 : 1.0);
+                const weightedArea = area * detailBoost;
+                totalArea += weightedArea;
+                collectedTris.push({
+                  ax: vA.x, ay: vA.y, az: vA.z,
+                  bx: vB.x, by: vB.y, bz: vB.z,
+                  cx: vC.x, cy: vC.y, cz: vC.z,
+                  cumArea: totalArea,
+                  zone: zoneTag
+                });
+              }
+
+              // Collect full triangulated wireframe edges for 3D mesh ("maillage") visibility
+              edgeLinePositions.push(
+                vA.x, vA.y, vA.z, vB.x, vB.y, vB.z,
+                vB.x, vB.y, vB.z, vC.x, vC.y, vC.z,
+                vC.x, vC.y, vC.z, vA.x, vA.y, vA.z
+              );
+            }
+          }
+        });
+
+        const SHIP_PT_COUNT = 24000;
+        const shipPtPos = new Float32Array(SHIP_PT_COUNT * 3);
+        const shipPtMeta = new Float32Array(SHIP_PT_COUNT * 2); // [zoneTag, randomSeed]
+
+        // Sample vertices evenly across all collected triangles of the ship for crisp corners & edges
+        let ptIdx = 0;
+        const stride = Math.max(1, Math.floor(collectedTris.length / 2200));
+        for (let i = 0; i < collectedTris.length && ptIdx < 6600; i += stride) {
+          const tr = collectedTris[i];
+          const verts = [
+            [tr.ax, tr.ay, tr.az],
+            [tr.bx, tr.by, tr.bz],
+            [tr.cx, tr.cy, tr.cz]
+          ];
+          for (let k = 0; k < 3 && ptIdx < 6600; k++) {
+            shipPtPos[ptIdx * 3]     = verts[k][0];
+            shipPtPos[ptIdx * 3 + 1] = verts[k][1];
+            shipPtPos[ptIdx * 3 + 2] = verts[k][2];
+            shipPtMeta[ptIdx * 2]     = tr.zone;
+            shipPtMeta[ptIdx * 2 + 1] = ((ptIdx * 16807) % 2147483647) / 2147483647;
+            ptIdx++;
+          }
+        }
+
+        // Fill remaining points via area-weighted surface + edge sampling across the entire ship
+        for (; ptIdx < SHIP_PT_COUNT; ptIdx++) {
+          const rArea = Math.random() * totalArea;
+          let lo = 0, hi = collectedTris.length - 1;
+          while (lo < hi) {
+            const mid = (lo + hi) >> 1;
+            if (collectedTris[mid].cumArea < rArea) lo = mid + 1;
+            else hi = mid;
+          }
+          const tr = collectedTris[lo];
+          // 35% edge-biased points for razor-sharp naval lines, 65% surface fill
+          let u = Math.random();
+          let v = Math.random();
+          if (ptIdx % 3 === 0) {
+            v = 0.0; // Lock onto structural edge
+          } else if (u + v > 1.0) {
+            u = 1.0 - u;
+            v = 1.0 - v;
+          }
+          const w = 1.0 - u - v;
+          shipPtPos[ptIdx * 3]     = tr.ax * w + tr.bx * u + tr.cx * v;
+          shipPtPos[ptIdx * 3 + 1] = tr.ay * w + tr.by * u + tr.cy * v;
+          shipPtPos[ptIdx * 3 + 2] = tr.az * w + tr.bz * u + tr.cz * v;
+          shipPtMeta[ptIdx * 2]     = tr.zone;
+          shipPtMeta[ptIdx * 2 + 1] = ((ptIdx * 48271) % 2147483647) / 2147483647;
+        }
+
+        const shipPointGeo = new THREE.BufferGeometry();
+        shipPointGeo.setAttribute('position', new THREE.BufferAttribute(shipPtPos, 3));
+        shipPointGeo.setAttribute('aMeta', new THREE.BufferAttribute(shipPtMeta, 2));
+
+        const shipPointVertexShader = `
+          uniform float uTime;
+          uniform float uWaveAmp;
+          uniform float uShipPointOpacity;
+          uniform float uFoldTube;
+          uniform float uBendTorus;
+          uniform float uGlowBoost;
+          uniform float uPixelRatio;
+          uniform float uMoodPalette;
+          uniform float uDofEnabled;
+          uniform float uFocusDistance;
+          uniform float uFocalRange;
+          uniform float uAperture;
+          uniform float uFocusPeaking;
+
+          attribute vec2 aMeta;
+
+          varying vec3 vColor;
+          varying float vAlpha;
+          varying float vCoC;
+          varying float vInFocusBand;
+
+          const float PI = 3.141592653589793;
+
+          void main() {
+            float zone = aMeta.x;
+            float rnd = aMeta.y;
+
+            // Local 3D position on OPV 58S WALO
+            vec3 shipPos = position;
+
+            // Subtle holographic breathing micro-pulse along hull frames
+            float scanWave = sin(shipPos.x * 1.4 - uTime * 3.8 + shipPos.y * 0.9);
+            shipPos += normalize(vec3(0.0, 0.25, shipPos.z + 0.001)) * (scanWave * 0.014 * uShipPointOpacity);
+
+            // When folding into Stage 3 (Tube) & Stage 4 (Torus), morph ship points into the inner quantum stream
+            float uNorm = clamp((position.x + 9.1) / 18.2, 0.0, 1.0);
+            float vNorm = fract(rnd + (position.y + 1.0) * 0.11);
+            float theta = (vNorm - 0.5) * 2.0 * PI + uTime * 0.65;
+            float innerTubeR = 4.2 + zone * 2.4 + sin(uNorm * 18.0 - uTime * 3.2) * 0.45 * uWaveAmp;
+
+            vec3 tubeCorePos = vec3(
+              sin(theta) * innerTubeR,
+              -cos(theta) * innerTubeR,
+              (uNorm - 0.5) * 110.0
+            );
+
+            float poloidal = theta + uBendTorus * (uNorm * 4.0 * PI - uTime * 1.1);
+            float toroidal = (uNorm - 0.5) * 2.0 * PI + uTime * 0.28;
+            float majorR = 15.5;
+            float minorR = 2.6 + zone * 1.8;
+            float ringR = majorR + minorR * cos(poloidal);
+            vec3 rawTorus = vec3(
+              ringR * cos(toroidal),
+              ringR * sin(toroidal),
+              minorR * sin(poloidal)
+            );
+            float tiltX = 0.52;
+            float tiltY = -0.24;
+            vec3 tiltedTorus = vec3(
+              rawTorus.x,
+              rawTorus.y * cos(tiltX) - rawTorus.z * sin(tiltX),
+              rawTorus.y * sin(tiltX) + rawTorus.z * cos(tiltX)
+            );
+            tiltedTorus = vec3(
+              tiltedTorus.x * cos(tiltY) + tiltedTorus.z * sin(tiltY),
+              tiltedTorus.y,
+              -tiltedTorus.x * sin(tiltY) + tiltedTorus.z * cos(tiltY)
+            );
+
+            float curlT = smoothstep(0.0, 1.0, uFoldTube);
+            float bendT = smoothstep(0.0, 1.0, uBendTorus);
+            vec3 morphedPos = mix(shipPos, tubeCorePos, curlT);
+            morphedPos = mix(morphedPos, tiltedTorus, bendT);
+
+            // Color Palette matching Ocean Mood + High-Contrast Naval Technical Highlights
+            vec3 colHullCyan = vec3(0.18, 0.85, 1.00);
+            vec3 colSuperBlue = vec3(0.48, 0.72, 1.00);
+            vec3 colAccentGold = vec3(1.00, 0.68, 0.24);
+            vec3 colSensorWhite = vec3(0.92, 0.98, 1.00);
+
+            if (uMoodPalette > 0.5 && uMoodPalette < 1.5) {
+              colHullCyan = vec3(0.12, 0.98, 0.76);
+              colSuperBlue = vec3(0.35, 0.92, 0.95);
+              colAccentGold = vec3(0.65, 1.00, 0.45);
+            } else if (uMoodPalette >= 1.5 && uMoodPalette < 2.5) {
+              colHullCyan = vec3(1.00, 0.48, 0.18);
+              colSuperBlue = vec3(1.00, 0.72, 0.32);
+              colAccentGold = vec3(1.00, 0.92, 0.55);
+            } else if (uMoodPalette >= 2.5) {
+              colHullCyan = vec3(0.76, 0.36, 1.00);
+              colSuperBlue = vec3(0.95, 0.45, 0.88);
+              colAccentGold = vec3(0.45, 0.88, 1.00);
+            }
+
+            float heightFactor = clamp((position.y + 0.5) / 8.5, 0.0, 1.0);
+            vec3 ptColor = mix(colHullCyan, colSuperBlue, smoothstep(0.15, 0.55, heightFactor));
+            ptColor = mix(ptColor, colAccentGold, smoothstep(0.50, 0.92, zone));
+            ptColor = mix(ptColor, colSensorWhite, smoothstep(0.75, 1.0, heightFactor) * 0.65);
+            ptColor += colSensorWhite * smoothstep(0.88, 0.99, scanWave) * 0.45;
+            ptColor *= uGlowBoost * 1.15;
+
+            vec4 mvPosition = modelViewMatrix * vec4(morphedPos, 1.0);
+            gl_Position = projectionMatrix * mvPosition;
+
+            float viewZ = max(1.0, -mvPosition.z);
+            float distFromFocus = abs(viewZ - uFocusDistance);
+            float defocusDistance = max(0.0, distFromFocus - uFocalRange);
+
+            float rawCoC = (defocusDistance / 18.0) * uAperture * uDofEnabled;
+            vCoC = clamp(rawCoC, 0.0, 1.0);
+
+            vInFocusBand = (1.0 - smoothstep(0.0, max(0.9, uFocalRange * 0.55), distFromFocus)) * uFocusPeaking * uDofEnabled;
+            vec3 peakingColor = vec3(0.35, 1.0, 0.78);
+            vColor = mix(ptColor, peakingColor * 1.45, vInFocusBand * 0.78);
+
+            float basePtSize = 0.82 + zone * 0.55 + rnd * 0.35;
+            float sharpSize = (46.0 / viewZ) * uPixelRatio * basePtSize;
+            float bokehExpansion = 1.0 + vCoC * vCoC * 5.8 + vCoC * 1.9;
+            gl_PointSize = clamp(sharpSize * bokehExpansion, 1.35, 76.0 * uPixelRatio);
+
+            float energyConservation = 1.0 / (1.0 + vCoC * 3.2 + vCoC * vCoC * 3.5);
+            vAlpha = uShipPointOpacity * energyConservation * (0.78 + 0.22 * sin(uTime * 3.4 + rnd * 6.283));
+          }
+        `;
+
+        uniforms.uShipPointOpacity = { value: 0.12 };
+
+        const shipPointMat = new THREE.ShaderMaterial({
+          vertexShader: shipPointVertexShader,
+          fragmentShader: particleFragmentShader,
+          uniforms: uniforms,
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending
+        });
+
+        const shipPointCloud = new THREE.Points(shipPointGeo, shipPointMat);
+        shipPointCloud.frustumCulled = false;
+        shipPointCloud.renderOrder = 3;
+        shipGroup.add(shipPointCloud);
+
+        // Holographic Structural Wireframe Overlay ("Maillage 3D") on the Ship
+        const wireGeo = new THREE.BufferGeometry();
+        wireGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgeLinePositions, 3));
+        const wireMat = new THREE.LineBasicMaterial({
+          color: 0x38bdf8,
+          transparent: true,
+          opacity: 0.18,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending
+        });
+        const shipWireframe = new THREE.LineSegments(wireGeo, wireMat);
+        shipWireframe.renderOrder = 2;
+        shipGroup.add(shipWireframe);
+
+        // Collect all solid meshes (excluding point cloud, wireframe & bow spray) so we can cross-fade them cleanly
+        const solidMeshes = [];
+        shipGroup.traverse((ch) => {
+          if (ch.isMesh) {
+            ch.renderOrder = 1;
+            solidMeshes.push(ch);
+          }
+        });
+
+        return {
+          group: shipGroup,
+          solidMeshes,
+          shipPointCloud,
+          shipWireframe,
+          wireMat,
+          radarSpinner,
+          flagMesh,
+          sprayPoints,
+          sprayVels,
+          solidMaterials,
+          materials: [...solidMaterials, sprayMat]
+        };
+      }
+
+      const waloShip = createOPV58Walo();
+      // Place OPV 58S WALO in the foreground/midground angled like the reference photo
+      const shipBaseX = 4.2;
+      const shipBaseZ = 8.8;
+      const shipHeading = -0.36; // Angled toward starboard bow
+      waloShip.group.position.set(shipBaseX, 0, shipBaseZ);
+      waloShip.group.rotation.y = shipHeading;
+      scene.add(waloShip.group);
+
+      // JavaScript mirror of the 5-wave Gerstner + Shockwave function for exact ship buoyancy
+      function sampleGerstnerHeightJS(px, pz, time, ampScale, shockCenter, shockTime) {
+        const waves = [
+          [0.88, 0.47, 0.26, 26.0],
+          [-0.62, 0.78, 0.22, 17.5],
+          [0.32, -0.94, 0.18, 11.2],
+          [-0.91, -0.41, 0.15, 6.8],
+          [0.74, -0.67, 0.12, 4.1]
+        ];
+        let y = 0.0;
+        for (let i = 0; i < 5; i++) {
+          let dx = waves[i][0], dz = waves[i][1];
+          const len = Math.hypot(dx, dz);
+          dx /= len; dz /= len;
+          const steepness = waves[i][2] * ampScale;
+          const wl = waves[i][3];
+          const k = 6.2831853 / wl;
+          const c = Math.sqrt(9.8 / k);
+          const f = k * ((dx * px + dz * pz) - c * time * 1.15);
+          const a = steepness / k;
+          y += a * Math.sin(f);
+        }
+        y += Math.sin(px * 0.65 + time * 2.2) * Math.cos(pz * 0.65 - time * 1.8) * 0.18 * ampScale;
+
+        if (shockTime > 0.01 && shockTime < 6.5) {
+          const dWave = Math.hypot(px - shockCenter.x, pz - shockCenter.y);
+          const ringDist = dWave - shockTime * 19.5;
+          const env = Math.exp(-ringDist * ringDist * 0.16) * Math.exp(-shockTime * 0.58);
+          y += Math.sin(ringDist * 1.9 - shockTime * 9.0) * env * 1.35 * ampScale;
+        }
+        return y;
+      }
+
+      /* -----------------------------------------------------------------------
+         7. UI SLIDERS, DIRECT MOUSE CAMERA DRAG & 3D RAYCAST AUTOFOCUS
+         ----------------------------------------------------------------------- */
+      let targetProgress = 0;
+      let smoothProgress = 0;
+      let manualOverride = false;
+
+      const sliderMorph = document.getElementById('slider-morph');
+      const sliderWave = document.getElementById('slider-wave');
+      const sliderGlow = document.getElementById('slider-glow');
+      const valWave = document.getElementById('val-wave');
+      const valGlow = document.getElementById('val-glow');
+      const hudPercent = document.getElementById('hud-percent');
+      const morphStageLabel = document.getElementById('morph-stage-label');
+
+      // Optical DoF Sliders
+      const sliderFocusDist = document.getElementById('slider-focus-dist');
+      const sliderAperture = document.getElementById('slider-aperture');
+      const sliderFocalRange = document.getElementById('slider-focal-range');
+
+      // Camera Rig Sliders
+      const sliderCamHeight = document.getElementById('slider-cam-height');
+      const sliderCamPitch = document.getElementById('slider-cam-pitch');
+      const sliderCamYaw = document.getElementById('slider-cam-yaw');
+      const sliderCamRoll = document.getElementById('slider-cam-roll');
+
+      const topStageBtns = document.querySelectorAll('.stage-top-btn');
+      const sideStepBtns = document.querySelectorAll('.side-step-btn');
+
+      function updateScrollProgress() {
+        if (manualOverride) return;
+        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+        if (maxScroll <= 0) return;
+        targetProgress = Math.min(1, Math.max(0, window.scrollY / maxScroll));
+        sliderMorph.value = targetProgress.toFixed(3);
+      }
+
+      window.addEventListener('scroll', updateScrollProgress, { passive: true });
+      updateScrollProgress();
+
+      // Geometry Sliders
+      sliderMorph.addEventListener('input', (e) => {
+        manualOverride = true;
+        targetProgress = parseFloat(e.target.value);
+        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+        window.scrollTo({ top: targetProgress * maxScroll, behavior: 'auto' });
+        setTimeout(() => { manualOverride = false; }, 150);
+      });
+
+      sliderWave.addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value);
+        uniforms.uWaveAmp.value = v;
+        valWave.textContent = v.toFixed(2) + '×';
+      });
+
+      sliderGlow.addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value);
+        uniforms.uGlowBoost.value = v;
+        valGlow.textContent = v.toFixed(2) + '×';
+      });
+
+      // Camera Rig Sliders
+      sliderCamHeight.addEventListener('input', (e) => {
+        if (cameraMode === 'auto') setCameraMode('combined');
+        userCamHeight = parseFloat(e.target.value);
+        updateCameraRigHUD();
+      });
+
+      sliderCamPitch.addEventListener('input', (e) => {
+        if (cameraMode === 'auto') setCameraMode('combined');
+        userCamPitch = parseFloat(e.target.value);
+        updateCameraRigHUD();
+      });
+
+      sliderCamYaw.addEventListener('input', (e) => {
+        if (cameraMode === 'auto') setCameraMode('combined');
+        userCamYaw = parseFloat(e.target.value);
+        updateCameraRigHUD();
+      });
+
+      sliderCamRoll.addEventListener('input', (e) => {
+        if (cameraMode === 'auto') setCameraMode('combined');
+        userCamRoll = parseFloat(e.target.value);
+        updateCameraRigHUD();
+      });
+
+      // Optical Depth of Field Sliders
+      sliderFocusDist.addEventListener('input', (e) => {
+        if (focusMode !== 'manual') setFocusMode('manual');
+        targetFocusDistance = parseFloat(e.target.value);
+        triggerTransientPeaking();
+        updateOpticsSummaryHUD();
+      });
+
+      sliderAperture.addEventListener('input', (e) => {
+        currentFStop = parseFloat(e.target.value);
+        triggerTransientPeaking();
+        updateOpticsSummaryHUD();
+      });
+
+      sliderFocalRange.addEventListener('input', (e) => {
+        currentFocalRange = parseFloat(e.target.value);
+        triggerTransientPeaking();
+        updateOpticsSummaryHUD();
+      });
+
+      // 3D Raycasting for Click/Hover Autofocus
+      const raycaster = new THREE.Raycaster();
+      const pointerNDC = new THREE.Vector2();
+      const oceanPlaneMath = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+      const intersectPt = new THREE.Vector3();
+      let reticleHideTimer = null;
+
+      function compute3DFocusDistanceFromScreen(clientX, clientY, showReticleVisual) {
+        pointerNDC.x = (clientX / window.innerWidth) * 2 - 1;
+        pointerNDC.y = -(clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(pointerNDC, camera);
+
+        const foldTube = uniforms.uFoldTube.value;
+        const bendTorus = uniforms.uBendTorus.value;
+        let measuredDist = targetFocusDistance;
+
+        if (foldTube < 0.45) {
+          if (raycaster.ray.intersectPlane(oceanPlaneMath, intersectPt)) {
+            const d = camera.position.distanceTo(intersectPt);
+            if (d >= 6 && d <= 85) measuredDist = d;
+          } else {
+            measuredDist = 22.0 + (1.0 - clientY / window.innerHeight) * 42.0;
+          }
+        } else if (bendTorus < 0.45) {
+          const radialNorm = Math.min(1.0, Math.hypot(pointerNDC.x, pointerNDC.y));
+          measuredDist = 16.0 + (1.0 - radialNorm) * 34.0;
+        } else {
+          const torusNormal = new THREE.Vector3(0.22, 0.48, 0.85).normalize();
+          const torusPlane = new THREE.Plane(torusNormal, 0);
+          if (raycaster.ray.intersectPlane(torusPlane, intersectPt)) {
+            const d = camera.position.distanceTo(intersectPt);
+            measuredDist = Math.min(62.0, Math.max(16.0, d));
+          }
+        }
+
+        targetFocusDistance = Math.min(85.0, Math.max(6.0, measuredDist));
+        updateOpticsSummaryHUD();
+
+        if (showReticleVisual && reticle) {
+          reticle.style.left = `${clientX}px`;
+          reticle.style.top = `${clientY}px`;
+          if (reticleDistLabel) reticleDistLabel.textContent = `${targetFocusDistance.toFixed(1)}m`;
+          reticle.classList.add('active');
+          triggerTransientPeaking();
+
+          if (reticleHideTimer) clearTimeout(reticleHideTimer);
+          reticleHideTimer = setTimeout(() => {
+            reticle.classList.remove('active');
+          }, 950);
+        }
+      }
+
+      // Direct Mouse Drag for Camera Angles (Right-click or Shift+Left-click) and Height (Alt+Drag)
+      let isDraggingCamera = false;
+      let dragType = 'angles'; // 'angles' | 'height'
+      let dragStartX = 0;
+      let dragStartY = 0;
+      let dragStartYaw = 0;
+      let dragStartPitch = 0;
+      let dragStartHeight = 0;
+
+      window.addEventListener('contextmenu', (e) => {
+        if (!e.target.closest('.interactive-card')) {
+          e.preventDefault();
+        }
+      });
+
+      window.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('.interactive-card') || e.target.closest('button') || e.target.closest('input')) {
+          return;
+        }
+
+        // Right-click OR Shift+Left-click -> Adjust Pitch & Yaw directly
+        if (e.button === 2 || (e.button === 0 && e.shiftKey)) {
+          isDraggingCamera = true;
+          dragType = 'angles';
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
+          dragStartYaw = userCamYaw;
+          dragStartPitch = userCamPitch;
+          if (cameraMode === 'auto') setCameraMode('combined');
+          canvas.classList.add('dragging-cam');
+          return;
+        }
+
+        // Alt+Left-click -> Adjust Camera Height / Altitude directly
+        if (e.button === 0 && e.altKey) {
+          isDraggingCamera = true;
+          dragType = 'height';
+          dragStartY = e.clientY;
+          dragStartHeight = userCamHeight;
+          if (cameraMode === 'auto') setCameraMode('combined');
+          canvas.classList.add('dragging-cam');
+          return;
+        }
+
+        // Standard Left-click -> 3D Autofocus Raycast + Interactive Shockwave Ripple
+        if (focusMode === 'auto') setFocusMode('pointer');
+        compute3DFocusDistanceFromScreen(e.clientX, e.clientY, true);
+        if (raycaster.ray.intersectPlane(oceanPlaneMath, intersectPt)) {
+          uniforms.uShockwaveCenter.value.set(
+            Math.max(-280, Math.min(280, intersectPt.x)),
+            Math.max(-280, Math.min(280, intersectPt.z))
+          );
+        } else {
+          uniforms.uShockwaveCenter.value.set(0.0, 0.0);
+        }
+        shockwaveStartTimestamp = clock.getElapsedTime();
+      });
+
+      // Keyboard Shortcuts (1-4: Stages, Space: Auto-Tour, C: Camera Tab, D: DoF Tab)
+      window.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.key === '1') jumpToStage(0);
+        else if (e.key === '2') jumpToStage(1);
+        else if (e.key === '3') jumpToStage(2);
+        else if (e.key === '4') jumpToStage(3);
+        else if (e.key === ' ') {
+          e.preventDefault();
+          toggleAutoTour();
+        } else if (e.key.toLowerCase() === 'c') {
+          switchStudioTab('camera');
+        } else if (e.key.toLowerCase() === 'd') {
+          switchStudioTab('dof');
+        }
+      });
+
+      let mouseX = 0, mouseY = 0;
+      let targetMouseX = 0, targetMouseY = 0;
+
+      window.addEventListener('pointermove', (e) => {
+        if (isDraggingCamera) {
+          const dx = e.clientX - dragStartX;
+          const dy = e.clientY - dragStartY;
+
+          if (dragType === 'angles') {
+            userCamYaw = Math.max(-180, Math.min(180, dragStartYaw - dx * 0.28));
+            userCamPitch = Math.max(-85, Math.min(45, dragStartPitch - dy * 0.22));
+          } else if (dragType === 'height') {
+            userCamHeight = Math.max(-5.0, Math.min(45.0, dragStartHeight - dy * 0.12));
+          }
+          updateCameraRigHUD();
+          return;
+        }
+
+        targetMouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+        targetMouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+
+        if (focusMode === 'pointer' && !e.target.closest('.interactive-card')) {
+          compute3DFocusDistanceFromScreen(e.clientX, e.clientY, false);
+        }
+      });
+
+      window.addEventListener('pointerup', () => {
+        if (isDraggingCamera) {
+          isDraggingCamera = false;
+          canvas.classList.remove('dragging-cam');
+        }
+      });
+
+      function clamp01(x) {
+        return Math.min(1.0, Math.max(0.0, x));
+      }
+
+      function smoothstep(edge0, edge1, x) {
+        const t = clamp01((x - edge0) / (edge1 - edge0));
+        return t * t * (3.0 - 2.0 * t);
+      }
+
+      function updateHUDIndicators(p) {
+        const pct = Math.round(p * 100);
+        if (hudPercent) hudPercent.textContent = String(pct).padStart(2, '0') + '%';
+
+        let activeStage = 0;
+        if (p < 0.22) activeStage = 0;
+        else if (p < 0.54) activeStage = 1;
+        else if (p < 0.82) activeStage = 2;
+        else activeStage = 3;
+
+        const stageNamesFR = [
+          "01. Océan Réaliste",
+          "02. Calque Particulaire",
+          "03. Tube de Particules",
+          "04. Tore Énergétique"
+        ];
+        const stageNamesEN = [
+          "01. Realistic Ocean",
+          "02. Particle Overlay",
+          "03. Particle Tube",
+          "04. Energy Torus"
+        ];
+        if (morphStageLabel) {
+          morphStageLabel.textContent = currentLang === 'fr' ? stageNamesFR[activeStage] : stageNamesEN[activeStage];
+        }
+
+        topStageBtns.forEach((btn, idx) => {
+          if (idx === activeStage) {
+            btn.className = 'stage-top-btn px-3.5 py-1 rounded-full text-xs font-medium transition text-white bg-white/15 border border-white/20 shadow-[0_0_15px_rgba(56,189,248,0.25)] cursor-pointer';
+          } else {
+            btn.className = 'stage-top-btn px-3.5 py-1 rounded-full text-xs font-medium transition text-white/55 hover:text-white cursor-pointer';
+          }
+        });
+
+        sideStepBtns.forEach((btn, idx) => {
+          const dot = btn.querySelector('.step-dot');
+          const txt = btn.querySelector('span:last-child');
+          if (idx === activeStage) {
+            dot.className = 'step-dot w-2.5 h-6 rounded-full bg-cyan-400 shadow-[0_0_12px_#38bdf8] transition-all duration-300';
+            txt.className = 'text-[11px] font-medium text-white transition';
+          } else {
+            dot.className = 'step-dot w-2.5 h-2.5 rounded-full bg-white/25 transition-all duration-300';
+            txt.className = 'text-[11px] font-medium text-white/45 group-hover:text-white transition';
+          }
+        });
+      }
+
+      updateOpticsSummaryHUD();
+      updateCameraRigHUD();
+
+      /* -----------------------------------------------------------------------
+         8. MAIN RENDER, METAMORPHOSIS, DOF & 6-DOF CAMERA RIG LOOP
+         ----------------------------------------------------------------------- */
+      const clock = new THREE.Clock();
+      const DEG2RAD = Math.PI / 180;
+      const hudFpsEl = document.getElementById('hud-fps');
+      let frameCount = 0;
+      let lastFpsUpdate = performance.now();
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        frameCount++;
+        const nowPerf = performance.now();
+        if (nowPerf - lastFpsUpdate >= 500) {
+          const fps = Math.min(120, Math.round((frameCount * 1000) / (nowPerf - lastFpsUpdate)));
+          if (hudFpsEl) hudFpsEl.textContent = `${fps} FPS`;
+          frameCount = 0;
+          lastFpsUpdate = nowPerf;
+        }
+
+        const elapsedTime = clock.getElapsedTime();
+        uniforms.uTime.value = elapsedTime;
+        uniforms.uShockwaveTime.value = Math.max(0.0, elapsedTime - shockwaveStartTimestamp);
+        uniforms.uMoodPalette.value += (currentOceanMood - uniforms.uMoodPalette.value) * 0.08;
+
+        if (autoTourEnabled && !isDraggingCamera) {
+          const tourProgress = 0.5 - 0.5 * Math.cos(elapsedTime * 0.14);
+          targetProgress = tourProgress;
+          if (sliderMorph && document.activeElement !== sliderMorph) {
+            sliderMorph.value = targetProgress.toFixed(3);
+          }
+          userCamYaw = Math.sin(elapsedTime * 0.22) * 28.0;
+          userCamRoll = Math.sin(elapsedTime * 0.31) * 5.5;
+        }
+
+        smoothProgress += (targetProgress - smoothProgress) * 0.065;
+        mouseX += (targetMouseX - mouseX) * 0.05;
+        mouseY += (targetMouseY - mouseY) * 0.05;
+
+        const p = smoothProgress;
+        updateHUDIndicators(p);
+
+        // 1. Ocean & Particle Overlay Opacity
+        const particleFadeIn = smoothstep(0.10, 0.30, p);
+        uniforms.uParticleOpacity.value = 0.08 + particleFadeIn * 0.92;
+
+        const lockOnBell = Math.sin(smoothstep(0.12, 0.38, p) * Math.PI);
+        uniforms.uScanlineGlow.value = lockOnBell;
+
+        const oceanFadeOut = 1.0 - smoothstep(0.26, 0.45, p);
+        uniforms.uOceanOpacity.value = oceanFadeOut;
+        oceanMesh.visible = oceanFadeOut > 0.005;
+
+        // Update OPV 58S WALO Solid-to-Point-Mesh Metamorphosis, Buoyancy, Radar & Bow Spray
+        const solidShipOpacity = 1.0 - smoothstep(0.20, 0.38, p);
+        const shipPointsFadeIn = smoothstep(0.06, 0.25, p);
+        uniforms.uShipPointOpacity.value = 0.24 + shipPointsFadeIn * 0.76;
+
+        // Cross-fade solid PBR hull into the 24,000-point 3D Point Mesh + Holographic Wireframe
+        const showSolidHull = solidShipOpacity > 0.01;
+        for (let m = 0; m < waloShip.solidMaterials.length; m++) {
+          waloShip.solidMaterials[m].opacity = solidShipOpacity;
+          waloShip.solidMaterials[m].depthWrite = solidShipOpacity > 0.25;
+        }
+        for (let i = 0; i < waloShip.solidMeshes.length; i++) {
+          waloShip.solidMeshes[i].visible = showSolidHull;
+        }
+
+        // Visible 3D Wireframe Mesh ("Maillage") in Stage 1 (0.18), intensifying in Stage 2 (0.58), fading into Tube
+        const wireFadeOutToTube = 1.0 - smoothstep(0.45, 0.62, p);
+        const wireGlow = (0.18 + Math.max(lockOnBell * 0.42, smoothstep(0.10, 0.28, p) * 0.40)) * wireFadeOutToTube;
+        waloShip.wireMat.opacity = wireGlow;
+        waloShip.shipWireframe.visible = wireGlow > 0.005;
+
+        const waveAmp = uniforms.uWaveAmp.value;
+        const sTime = uniforms.uShockwaveTime.value;
+        const sCenter = uniforms.uShockwaveCenter.value;
+        const shipOnWaterFactor = 1.0 - smoothstep(0.45, 0.68, p);
+
+        // Subtle forward headway & yaw sway on the swell (centres smoothly when morphing into Tube/Torus)
+        const curShipX = (shipBaseX + Math.sin(elapsedTime * 0.35) * 0.65) * shipOnWaterFactor;
+        const curShipZ = (shipBaseZ + Math.cos(elapsedTime * 0.28) * 0.45) * shipOnWaterFactor;
+        const curHeading = (shipHeading + Math.sin(elapsedTime * 0.42) * 0.025) * shipOnWaterFactor;
+
+        uniforms.uShipPos.value.set(curShipX, curShipZ);
+        uniforms.uShipHeading.value = curHeading;
+
+        const ch = Math.cos(curHeading);
+        const sh = Math.sin(curHeading);
+
+        // Sample wave elevation at Bow (+6.5m), Stern (-6.5m), Starboard (+1.4m) & Port (-1.4m)
+        const yBow   = sampleGerstnerHeightJS(curShipX + ch * 6.5, curShipZ - sh * 6.5, elapsedTime, waveAmp, sCenter, sTime);
+        const yStern = sampleGerstnerHeightJS(curShipX - ch * 6.5, curShipZ + sh * 6.5, elapsedTime, waveAmp, sCenter, sTime);
+        const yMid   = sampleGerstnerHeightJS(curShipX, curShipZ, elapsedTime, waveAmp, sCenter, sTime);
+        const yStb   = sampleGerstnerHeightJS(curShipX + sh * 1.4, curShipZ + ch * 1.4, elapsedTime, waveAmp, sCenter, sTime);
+        const yPort  = sampleGerstnerHeightJS(curShipX - sh * 1.4, curShipZ - ch * 1.4, elapsedTime, waveAmp, sCenter, sTime);
+
+        const targetHeave = ((yBow * 0.25 + yStern * 0.25 + yMid * 0.5) - 0.12) * shipOnWaterFactor;
+        const targetPitch = Math.atan2(yBow - yStern, 13.0) * 0.68 * shipOnWaterFactor;
+        const targetRoll  = Math.atan2(yPort - yStb, 2.8) * 0.55 * shipOnWaterFactor;
+
+        waloShip.group.position.x = curShipX;
+        waloShip.group.position.z = curShipZ;
+        waloShip.group.position.y += (targetHeave - waloShip.group.position.y) * 0.14;
+        waloShip.group.rotation.y = curHeading;
+        waloShip.group.rotation.z += (targetPitch - waloShip.group.rotation.z) * 0.12;
+        waloShip.group.rotation.x += (targetRoll - waloShip.group.rotation.x) * 0.12;
+
+        // Spin X-band Navigation Radar & flutter mast pennant
+        waloShip.radarSpinner.rotation.y = elapsedTime * 4.2;
+        waloShip.flagMesh.rotation.y = Math.sin(elapsedTime * 7.5) * 0.25;
+
+        // Animate 3D Bow Spray droplets while on the ocean (Stages 1 & 2)
+        waloShip.sprayPoints.visible = shipOnWaterFactor > 0.05;
+        if (waloShip.sprayPoints.visible) {
+          const spArr = waloShip.sprayPoints.geometry.attributes.position.array;
+          for (let i = 0; i < waloShip.sprayVels.length; i++) {
+            const sv = waloShip.sprayVels[i];
+            sv.life += 0.028;
+            if (sv.life >= 1.0) {
+              sv.life = 0.0;
+              spArr[i * 3]     = 7.6 + (Math.random() - 0.5) * 1.4;
+              spArr[i * 3 + 1] = 0.05;
+              spArr[i * 3 + 2] = (Math.random() - 0.5) * 0.75;
+            } else {
+              spArr[i * 3]     += sv.vx * 0.032;
+              spArr[i * 3 + 1] += (sv.vy - 5.2 * sv.life) * 0.032;
+              spArr[i * 3 + 2] += sv.vz * 0.032;
+            }
+          }
+          waloShip.sprayPoints.geometry.attributes.position.needsUpdate = true;
+          waloShip.sprayPoints.material.opacity = 0.76 * shipOnWaterFactor;
+        }
+
+        if (atmosphereOverlay) {
+          atmosphereOverlay.style.opacity = (0.35 + oceanFadeOut * 0.65).toFixed(2);
+        }
+
+        // 2. Folding Sheet -> Tube (Stage 3)
+        const foldTube = smoothstep(0.45, 0.74, p);
+        uniforms.uFoldTube.value = foldTube;
+
+        // 3. Bending Tube -> Torus (Stage 4)
+        const bendTorus = smoothstep(0.75, 0.98, p);
+        uniforms.uBendTorus.value = bendTorus;
+
+        // 4. Auto-Scroll Focus Tracking when in 'auto' mode
+        if (focusMode === 'auto') {
+          const autoDist = 24.5 * (1.0 - foldTube)
+                         + 21.0 * foldTube * (1.0 - bendTorus)
+                         + 31.5 * bendTorus
+                         + Math.sin(elapsedTime * 0.7) * 2.5;
+          targetFocusDistance = autoDist;
+          updateOpticsSummaryHUD();
+        }
+
+        currentFocusDistance += (targetFocusDistance - currentFocusDistance) * 0.085;
+
+        uniforms.uDofEnabled.value += ((dofEnabled ? 1.0 : 0.0) - uniforms.uDofEnabled.value) * 0.12;
+        uniforms.uFocusDistance.value = currentFocusDistance;
+        uniforms.uFocalRange.value += (currentFocalRange - uniforms.uFocalRange.value) * 0.12;
+
+        const targetApertureStrength = fStopToApertureStrength(currentFStop);
+        uniforms.uAperture.value += (targetApertureStrength - uniforms.uAperture.value) * 0.12;
+
+        const desiredPeaking = focusPeakingMode === 'on' ? 1.0 : (focusPeakingMode === 'auto' ? transientPeakingBoost : 0.0);
+        uniforms.uFocusPeaking.value += (desiredPeaking - uniforms.uFocusPeaking.value) * 0.14;
+
+        // 5. Camera Rig Choreography (Height, Pitch, Yaw, Roll & Lens FOV)
+        const autoBaseHeight = 7.2 * (1.0 - foldTube) + 1.2 * foldTube * (1.0 - bendTorus) + 0.5 * bendTorus;
+        const autoBasePitch = -10.5 * (1.0 - foldTube) + 0.0 * foldTube;
+        const camZ = 29.0 * (1.0 - foldTube) + 23.5 * foldTube * (1.0 - bendTorus) + 35.5 * bendTorus;
+
+        let targetEffectiveHeight = userCamHeight;
+        let targetEffectivePitch = userCamPitch;
+        let targetEffectiveYaw = userCamYaw;
+        let targetEffectiveRoll = userCamRoll;
+
+        if (cameraMode === 'auto') {
+          targetEffectiveHeight = autoBaseHeight;
+          targetEffectivePitch = autoBasePitch;
+          targetEffectiveYaw = 0.0;
+          targetEffectiveRoll = 0.0;
+          updateCameraRigHUD(targetEffectiveHeight, targetEffectivePitch, targetEffectiveYaw, targetEffectiveRoll);
+        } else if (cameraMode === 'combined') {
+          // Blends user slider offsets with scroll progression
+          const heightOffset = userCamHeight - 7.2;
+          const pitchOffset = userCamPitch - (-8.0);
+          targetEffectiveHeight = Math.max(-5.0, Math.min(45.0, autoBaseHeight + heightOffset));
+          targetEffectivePitch = Math.max(-85.0, Math.min(45.0, autoBasePitch + pitchOffset));
+          targetEffectiveYaw = userCamYaw;
+          targetEffectiveRoll = userCamRoll;
+          updateCameraRigHUD(targetEffectiveHeight, targetEffectivePitch, targetEffectiveYaw, targetEffectiveRoll);
+        } else {
+          // 100% Free Manual Mode
+          updateCameraRigHUD(userCamHeight, userCamPitch, userCamYaw, userCamRoll);
+        }
+
+        smoothCamHeight += (targetEffectiveHeight - smoothCamHeight) * 0.09;
+        smoothCamPitch += (targetEffectivePitch - smoothCamPitch) * 0.09;
+        smoothCamYaw += (targetEffectiveYaw - smoothCamYaw) * 0.09;
+        smoothCamRoll += (targetEffectiveRoll - smoothCamRoll) * 0.09;
+
+        // Smooth Lens FOV update
+        if (Math.abs(currentCameraFOV - targetCameraFOV) > 0.05) {
+          currentCameraFOV += (targetCameraFOV - currentCameraFOV) * 0.1;
+          camera.fov = currentCameraFOV;
+          camera.updateProjectionMatrix();
+        }
+
+        // Orbit camera position around scene center when Yaw is rotated, plus subtle pointer parallax
+        const yawRad = smoothCamYaw * DEG2RAD;
+        const pitchRad = smoothCamPitch * DEG2RAD;
+        const rollRad = smoothCamRoll * DEG2RAD;
+
+        const parallaxX = mouseX * (1.4 + bendTorus * 1.6);
+        const parallaxY = -mouseY * 1.1;
+
+        camera.position.x = Math.sin(yawRad) * camZ + Math.cos(yawRad) * parallaxX;
+        camera.position.y = smoothCamHeight + parallaxY;
+        camera.position.z = Math.cos(yawRad) * camZ - Math.sin(yawRad) * parallaxX;
+
+        // Apply Euler orientation (YXZ order: Yaw, Pitch, Roll) + pointer micro-aim
+        camera.rotation.y = yawRad - mouseX * 0.04;
+        camera.rotation.x = pitchRad - mouseY * 0.03;
+        camera.rotation.z = rollRad;
+
+        uniforms.uCameraPos.value.copy(camera.position);
+
+        particleSystem.rotation.y = mouseX * 0.18 * foldTube;
+        particleSystem.rotation.x = -mouseY * 0.12 * foldTube;
+
+        starField.rotation.y = elapsedTime * 0.015 + mouseX * 0.05;
+
+        renderer.render(scene, camera);
+      }
+
+      animate();
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        const newPR = Math.min(window.devicePixelRatio, 2);
+        renderer.setPixelRatio(newPR);
+        uniforms.uPixelRatio.value = newPR;
+      });
+    };
+  </script>
+</body>
+</html>
