@@ -337,19 +337,37 @@
           <input id="slider-morph" type="range" min="0" max="1" step="0.001" value="0" class="w-full" />
         </div>
 
-        <!-- Wave Amplitude -->
+        <!-- Ship Distance Control -->
         <div>
           <div class="flex justify-between text-[11px] text-white/70 mb-1">
-            <span data-i18n="ctrl_waves">Amplitude des Vagues</span>
-            <span id="val-wave" class="font-mono-tech text-white/90">1.00×</span>
+            <span data-i18n="ctrl_ship_dist">Distance du Navire</span>
+            <span id="val-ship-dist" class="font-mono-tech text-cyan-300">20.0 m</span>
           </div>
-          <input id="slider-wave" type="range" min="0.2" max="2.0" step="0.05" value="1.0" class="w-full" />
+          <input id="slider-ship-dist" type="range" min="10.0" max="110.0" step="0.5" value="20.0" class="w-full" />
+        </div>
+
+        <!-- Wave Amplitude & Randomness -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <div class="flex justify-between text-[10.5px] text-white/70 mb-1">
+              <span data-i18n="ctrl_waves">Amplitude Vagues</span>
+              <span id="val-wave" class="font-mono-tech text-white/90">1.00×</span>
+            </div>
+            <input id="slider-wave" type="range" min="0.2" max="2.0" step="0.05" value="1.0" class="w-full" />
+          </div>
+          <div>
+            <div class="flex justify-between text-[10.5px] text-white/70 mb-1">
+              <span data-i18n="ctrl_wave_chaos">Aléatoire Vagues</span>
+              <span id="val-wave-chaos" class="font-mono-tech text-amber-300">1.35×</span>
+            </div>
+            <input id="slider-wave-chaos" type="range" min="0.2" max="2.5" step="0.05" value="1.35" class="w-full" />
+          </div>
         </div>
 
         <!-- Particle Glow Intensity -->
         <div>
           <div class="flex justify-between text-[11px] text-white/70 mb-1">
-            <span data-i18n="ctrl_glow">Luminescence</span>
+            <span data-i18n="ctrl_glow">Luminescence & Points</span>
             <span id="val-glow" class="font-mono-tech text-white/90">1.25×</span>
           </div>
           <input id="slider-glow" type="range" min="0.5" max="2.5" step="0.05" value="1.25" class="w-full" />
@@ -835,8 +853,10 @@
         ctrl_hide: "Réduire",
         ctrl_show: "Ouvrir",
         ctrl_morph: "Métamorphose",
-        ctrl_waves: "Amplitude des Vagues",
-        ctrl_glow: "Luminescence",
+        ctrl_ship_dist: "Distance du Navire",
+        ctrl_waves: "Amplitude Vagues",
+        ctrl_wave_chaos: "Aléatoire Vagues",
+        ctrl_glow: "Luminescence & Points",
         ctrl_mood: "Atmosphère & Spectre",
         ctrl_ripple_hint: "✨ Clic 3D : Onde de choc + Autofocus · Touches 1–4 / Espace",
         hud_autotour: "Ciné-Tour",
@@ -913,8 +933,10 @@
         ctrl_hide: "Minimize",
         ctrl_show: "Expand",
         ctrl_morph: "Metamorphosis",
+        ctrl_ship_dist: "Vessel Distance",
         ctrl_waves: "Wave Amplitude",
-        ctrl_glow: "Luminescence",
+        ctrl_wave_chaos: "Wave Randomness",
+        ctrl_glow: "Glow & Mesh Points",
         ctrl_mood: "Atmosphere & Spectrum",
         ctrl_ripple_hint: "✨ 3D Click: Shockwave + Autofocus · Keys 1–4 / Space",
         hud_autotour: "Cine-Tour",
@@ -1112,53 +1134,145 @@
     }
 
     /* -------------------------------------------------------------------------
-       2. SHARED GLSL GERSTNER WAVE FUNCTION (5 DIRECTIONAL SWELLS)
+       2. SHARED GLSL GERSTNER + STOCHASTIC FBM WAVE ENGINE (SHORT-CRESTED & RANDOM)
        ------------------------------------------------------------------------- */
     const SHARED_GERSTNER_GLSL = `
+      uniform float uWaveChaos;
+
+      float waveHash21(vec2 p) {
+        p = fract(p * vec2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
+      }
+
+      // 2D Quintic Value Noise returning vec3(value in [-1, 1], dValue/dx, dValue/dz)
+      vec3 waveNoised(vec2 x) {
+        vec2 i = floor(x);
+        vec2 f = fract(x);
+        vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+        vec2 du = 30.0 * f * f * (f * (f - 2.0) + 1.0);
+
+        float a = waveHash21(i + vec2(0.0, 0.0));
+        float b = waveHash21(i + vec2(1.0, 0.0));
+        float c = waveHash21(i + vec2(0.0, 1.0));
+        float d = waveHash21(i + vec2(1.0, 1.0));
+
+        float k0 = a;
+        float k1 = b - a;
+        float k2 = c - a;
+        float k3 = a - b - c + d;
+
+        float val = (k0 + k1 * u.x + k2 * u.y + k3 * u.x * u.y) * 2.0 - 1.0;
+        vec2 grad = 2.0 * du * vec2(k1 + k3 * u.y, k2 + k3 * u.x);
+        return vec3(val, grad);
+      }
+
       vec4 computeGerstnerOcean(vec2 planeXZ, float time, float ampScale, out vec3 outNormal) {
         vec3 pos = vec3(planeXZ.x, 0.0, planeXZ.y);
         vec3 tangent = vec3(1.0, 0.0, 0.0);
         vec3 binormal = vec3(0.0, 0.0, 1.0);
 
-        vec4 waves[5];
-        waves[0] = vec4(0.88, 0.47, 0.26, 26.0);
-        waves[1] = vec4(-0.62, 0.78, 0.22, 17.5);
-        waves[2] = vec4(0.32, -0.94, 0.18, 11.2);
-        waves[3] = vec4(-0.91, -0.41, 0.15, 6.8);
-        waves[4] = vec4(0.74, -0.67, 0.12, 4.1);
+        // 10 incommensurable directional swells across a wide multi-directional spectrum
+        vec4 waves[10];
+        waves[0] = vec4( 0.88,  0.47, 0.21, 33.7);
+        waves[1] = vec4(-0.62,  0.78, 0.18, 22.9);
+        waves[2] = vec4( 0.31, -0.95, 0.16, 16.3);
+        waves[3] = vec4(-0.92, -0.39, 0.14, 11.8);
+        waves[4] = vec4( 0.73, -0.68, 0.13,  8.7);
+        waves[5] = vec4(-0.24,  0.97, 0.11,  6.4);
+        waves[6] = vec4( 0.96, -0.28, 0.10,  4.9);
+        waves[7] = vec4(-0.79, -0.61, 0.09,  3.7);
+        waves[8] = vec4( 0.48,  0.88, 0.08,  2.8);
+        waves[9] = vec4(-0.41, -0.91, 0.07,  2.1);
 
+        float chaos = max(0.15, uWaveChaos);
         float crestAccum = 0.0;
 
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 10; i++) {
+          float fi = float(i);
           vec2 d = normalize(waves[i].xy);
-          float steepness = waves[i].z * ampScale;
+          vec2 perp = vec2(-d.y, d.x);
+
+          // Spatial wave-packet envelope & curved wave-front domain warping so crests are finite and random
+          vec2 groupCoord = vec2(
+            dot(perp, planeXZ) * (0.026 + fi * 0.0035) + fi * 4.17,
+            dot(d, planeXZ) * (0.017 + fi * 0.0022) - time * (0.16 + fi * 0.02)
+          );
+          vec3 envNoise = waveNoised(groupCoord);
+          vec3 phaseBendNoise = waveNoised(groupCoord.yx * 1.37 + vec2(fi * 9.31, time * 0.11));
+
+          // Random packet modulation: creates local rogue peaks & quiet troughs instead of infinite lines
+          float packetEnvelope = mix(1.0, clamp(0.62 + 0.68 * envNoise.x, 0.12, 1.58), clamp(chaos * 0.72, 0.0, 1.25));
+          float steepness = waves[i].z * ampScale * packetEnvelope;
           float wl = waves[i].w;
           float k = 6.2831853 / wl;
-          float c = sqrt(9.8 / k);
-          float f = k * (dot(d, planeXZ) - c * time * 1.15);
+          float c = sqrt(9.8 / k) * (0.92 + 0.16 * fract(sin(fi * 37.1) * 437.5));
+          float phaseWarp = phaseBendNoise.x * 1.65 * chaos;
+          float f = k * (dot(d, planeXZ) - c * time * 1.12) + phaseWarp + fi * 2.39996;
           float a = steepness / k;
 
-          pos.x += d.x * (a * cos(f));
-          pos.y += a * sin(f);
-          pos.z += d.y * (a * cos(f));
+          // Asymmetric sharpened wave peaks (trochoidal pinch)
+          float sf = sin(f);
+          float cf = cos(f);
+
+          pos.x += d.x * (a * cf);
+          pos.y += a * sf;
+          pos.z += d.y * (a * cf);
 
           tangent += vec3(
-            -d.x * d.x * (steepness * sin(f)),
-            d.x * (steepness * cos(f)),
-            -d.x * d.y * (steepness * sin(f))
+            -d.x * d.x * (steepness * sf),
+            d.x * (steepness * cf),
+            -d.x * d.y * (steepness * sf)
           );
 
           binormal += vec3(
-            -d.x * d.y * (steepness * sin(f)),
-            d.y * (steepness * cos(f)),
-            -d.y * d.y * (steepness * sin(f))
+            -d.x * d.y * (steepness * sf),
+            d.y * (steepness * cf),
+            -d.y * d.y * (steepness * sf)
           );
 
-          crestAccum += sin(f) * (0.32 / float(i + 1));
+          crestAccum += sf * packetEnvelope * (0.26 / (1.0 + fi * 0.45));
         }
 
-        float microRipple = sin(planeXZ.x * 0.65 + time * 2.2) * cos(planeXZ.y * 0.65 - time * 1.8) * 0.18 * ampScale;
-        pos.y += microRipple;
+        // Multi-octave Rotated Stochastic FBM Chop with analytical surface gradients
+        mat2 rotOct = mat2(0.80, -0.60, 0.60, 0.80);
+        vec2 pChop = planeXZ * 0.055;
+        float turbY = 0.0;
+        vec2 turbGrad = vec2(0.0);
+        float octAmp = 0.58 * ampScale * chaos;
+        float octFreq = 0.055;
+        mat2 curRot = mat2(1.0, 0.0, 0.0, 1.0);
+
+        for (int oct = 0; oct < 4; oct++) {
+          float fo = float(oct);
+          vec2 windDrift = vec2(time * (0.48 + fo * 0.27), -time * (0.39 - fo * 0.19));
+          vec3 n = waveNoised(pChop + windDrift);
+          // Ridge-sharpened turbulent wavelets: 1.0 - abs(n.x) creates realistic choppy sea ridges
+          float ridge = 1.0 - abs(n.x);
+          float sharpRidge = ridge * ridge - 0.45;
+          float dRidge = -2.0 * ridge * (n.x >= 0.0 ? 1.0 : -1.0);
+
+          float weight = mix(n.x, sharpRidge, 0.52);
+          vec2 localGrad = mix(n.yz, dRidge * n.yz, 0.52);
+          // Transform gradient back by transpose of curRot
+          vec2 worldGrad = vec2(
+            curRot[0][0] * localGrad.x + curRot[0][1] * localGrad.y,
+            curRot[1][0] * localGrad.x + curRot[1][1] * localGrad.y
+          ) * octFreq;
+
+          turbY += weight * octAmp;
+          turbGrad += worldGrad * octAmp;
+          crestAccum += sharpRidge * 0.14 * chaos / (1.0 + fo * 0.6);
+
+          pChop = rotOct * pChop * 2.13 + vec2(17.3, -11.7);
+          curRot = rotOct * curRot;
+          octFreq *= 2.13;
+          octAmp *= 0.47;
+        }
+
+        pos.y += turbY;
+        tangent.y += turbGrad.x;
+        binormal.y += turbGrad.y;
 
         // Interactive 3D Shockwave Ring when user clicks the ocean / particle field
         if (uShockwaveTime > 0.01 && uShockwaveTime < 6.5) {
@@ -1177,7 +1291,7 @@
         }
 
         outNormal = normalize(cross(binormal, tangent));
-        float normalizedCrest = clamp((pos.y / (2.6 * max(0.35, ampScale))) * 0.5 + 0.5 + crestAccum * 0.25, 0.0, 1.0);
+        float normalizedCrest = clamp((pos.y / (2.7 * max(0.35, ampScale))) * 0.5 + 0.5 + crestAccum * 0.26, 0.0, 1.0);
         return vec4(pos, normalizedCrest);
       }
     `;
@@ -1960,6 +2074,7 @@
       const uniforms = {
         uTime: { value: 0 },
         uWaveAmp: { value: 1.0 },
+        uWaveChaos: { value: 1.35 },
         uOceanOpacity: { value: 1.0 },
         uScanlineGlow: { value: 0.0 },
         uParticleOpacity: { value: 0.08 },
@@ -1976,7 +2091,7 @@
         uShockwaveCenter: { value: new THREE.Vector2(0.0, 0.0) },
         uShockwaveTime: { value: 99.0 },
         uMoodPalette: { value: 0.0 },
-        uShipPos: { value: new THREE.Vector2(4.2, 8.8) },
+        uShipPos: { value: new THREE.Vector2(4.2, 9.0) },
         uShipHeading: { value: -0.36 }
       };
 
@@ -2120,51 +2235,51 @@
         const shipGroup = new THREE.Group();
         const platingBump = createHullPlatingTexture();
 
-        // High-Fidelity Naval Stealth Materials matching reference photo
+        // High-Fidelity Naval Stealth Materials (darkened stealth core + polygonOffset so screen-space mesh points pop cleanly)
         const matHullGrey = new THREE.MeshStandardMaterial({
-          color: 0x7b8794,
-          roughness: 0.42,
-          metalness: 0.30,
+          color: 0x263240,
+          roughness: 0.48,
+          metalness: 0.32,
           bumpMap: platingBump,
-          bumpScale: 0.012,
+          bumpScale: 0.010,
           side: THREE.DoubleSide
         });
         const matSuperGrey = new THREE.MeshStandardMaterial({
-          color: 0x8e9aa8,
-          roughness: 0.36,
-          metalness: 0.26,
+          color: 0x2f3d4d,
+          roughness: 0.42,
+          metalness: 0.28,
           bumpMap: platingBump,
-          bumpScale: 0.006,
+          bumpScale: 0.005,
           side: THREE.DoubleSide
         });
         const matSuperLight = new THREE.MeshStandardMaterial({
-          color: 0xa6b2be,
-          roughness: 0.32,
-          metalness: 0.24,
+          color: 0x3b4b5e,
+          roughness: 0.38,
+          metalness: 0.26,
           side: THREE.DoubleSide
         });
         const matBootBlack = new THREE.MeshStandardMaterial({
-          color: 0x11151c,
-          roughness: 0.48,
+          color: 0x0b0f17,
+          roughness: 0.52,
           metalness: 0.22,
           side: THREE.DoubleSide
         });
         const matDeckDark = new THREE.MeshStandardMaterial({
-          color: 0x2b3139,
+          color: 0x18202a,
           roughness: 0.85,
           metalness: 0.14,
           side: THREE.DoubleSide
         });
         const matBridgeGlass = new THREE.MeshStandardMaterial({
-          color: 0x05101a,
+          color: 0x040d17,
           roughness: 0.08,
           metalness: 0.94,
           emissive: 0x072f49,
           emissiveIntensity: 0.42
         });
-        const matDarkSteel = new THREE.MeshStandardMaterial({ color: 0x1e242c, roughness: 0.45, metalness: 0.72 });
-        const matBrightSteel = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.25, metalness: 0.85 });
-        const matRadomeWhite = new THREE.MeshStandardMaterial({ color: 0xf4f7fb, roughness: 0.22, metalness: 0.08 });
+        const matDarkSteel = new THREE.MeshStandardMaterial({ color: 0x161d26, roughness: 0.45, metalness: 0.72 });
+        const matBrightSteel = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.25, metalness: 0.85 });
+        const matRadomeWhite = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.22, metalness: 0.08 });
         const matOrangeFloat = new THREE.MeshStandardMaterial({ color: 0xea580c, roughness: 0.35, metalness: 0.10 });
 
         // Holographic Scanline & Opacity support on all solid ship materials for Stage 1 -> Stage 2 transition
@@ -2174,6 +2289,9 @@
         ];
         solidMaterials.forEach((m) => {
           m.transparent = true;
+          m.polygonOffset = true;
+          m.polygonOffsetFactor = 1.6;
+          m.polygonOffsetUnits = 2.5;
         });
 
         // =====================================================================
@@ -2952,20 +3070,44 @@
         const sprayPoints = new THREE.Points(sprayGeo, sprayMat);
         shipGroup.add(sprayPoints);
 
-        // 8. GENERATE 24,000-POINT 3D POINT-MESH ("MAILLAGE DE POINTS") & HOLOGRAPHIC WIREFRAME OF THE SHIP
+        // 8. GENERATE STRUCTURED 3D POINT-MESH ("POINTS DE MAILLAGE À L'ÉCRAN") OF THE SHIP
+        // Every mesh vertex & structural rib of OPV 58S WALO is rendered as a crisp screen-space point (no LineSegments lines)
         shipGroup.updateMatrixWorld(true);
         const invGroupMat = new THREE.Matrix4().copy(shipGroup.matrixWorld).invert();
-        const collectedTris = [];
-        let totalArea = 0;
 
         const vA = new THREE.Vector3();
         const vB = new THREE.Vector3();
         const vC = new THREE.Vector3();
-        const edge1 = new THREE.Vector3();
-        const edge2 = new THREE.Vector3();
-        const crossVec = new THREE.Vector3();
 
-        const edgeLinePositions = [];
+        const meshPointCoords = [];
+        const meshPointZones = [];
+        const seenVertexGrid = new Set();
+
+        function addUniqueMeshPoint(x, y, z, zoneTag) {
+          // Deduplicate on a 3.2cm spatial grid so every mesh vertex is a clean, distinct screen point
+          const gx = Math.round(x * 31);
+          const gy = Math.round(y * 31);
+          const gz = Math.round(z * 31);
+          const key = `${gx},${gy},${gz}`;
+          if (seenVertexGrid.has(key)) return;
+          seenVertexGrid.add(key);
+          meshPointCoords.push(x, y, z);
+          meshPointZones.push(zoneTag);
+        }
+
+        function sampleEdgePoints(p0, p1, stepDist, zoneTag) {
+          const dist = p0.distanceTo(p1);
+          const steps = Math.min(18, Math.floor(dist / stepDist));
+          for (let s = 1; s < steps; s++) {
+            const t = s / steps;
+            addUniqueMeshPoint(
+              p0.x + (p1.x - p0.x) * t,
+              p0.y + (p1.y - p0.y) * t,
+              p0.z + (p1.z - p0.z) * t,
+              zoneTag
+            );
+          }
+        }
 
         shipGroup.traverse((child) => {
           if (child.isMesh && child.geometry) {
@@ -2977,11 +3119,11 @@
             const idxAttr = geom.index;
             const triCount = idxAttr ? (idxAttr.count / 3) : (posAttr.count / 3);
 
-            // Color zone tag based on height / material (0: hull, 1: superstructure/bridge, 2: gun/mast/highlights)
-            let zoneTag = 0.2;
+            // Color zone tag based on height / material (0.2: hull, 0.55: superstructure, 0.80: mast/turret, 0.95: bridge/accents)
+            let zoneTag = 0.22;
             if (child.material === matBridgeGlass || child.material === matOrangeFloat) zoneTag = 0.95;
-            else if (child.material === matRadomeWhite || child.material === matBrightSteel) zoneTag = 0.80;
-            else if (child.material === matSuperLight || child.material === matSuperGrey) zoneTag = 0.55;
+            else if (child.material === matRadomeWhite || child.material === matBrightSteel) zoneTag = 0.82;
+            else if (child.material === matSuperLight || child.material === matSuperGrey) zoneTag = 0.58;
 
             for (let t = 0; t < triCount; t++) {
               const i0 = idxAttr ? idxAttr.getX(t * 3) : t * 3;
@@ -2992,83 +3134,26 @@
               vB.fromBufferAttribute(posAttr, i1).applyMatrix4(relMat);
               vC.fromBufferAttribute(posAttr, i2).applyMatrix4(relMat);
 
-              edge1.subVectors(vB, vA);
-              edge2.subVectors(vC, vA);
-              crossVec.crossVectors(edge1, edge2);
-              const area = 0.5 * crossVec.length();
-              if (area > 0.00001) {
-                // Boost sampling weight on fine details (mast, gun, railings, bridge) so small features are super crisp
-                const detailBoost = area < 0.08 ? 4.5 : (area < 0.25 ? 2.2 : 1.0);
-                const weightedArea = area * detailBoost;
-                totalArea += weightedArea;
-                collectedTris.push({
-                  ax: vA.x, ay: vA.y, az: vA.z,
-                  bx: vB.x, by: vB.y, bz: vB.z,
-                  cx: vC.x, cy: vC.y, cz: vC.z,
-                  cumArea: totalArea,
-                  zone: zoneTag
-                });
-              }
+              // 1. Add the exact mesh vertices
+              addUniqueMeshPoint(vA.x, vA.y, vA.z, zoneTag);
+              addUniqueMeshPoint(vB.x, vB.y, vB.z, zoneTag);
+              addUniqueMeshPoint(vC.x, vC.y, vC.z, zoneTag);
 
-              // Collect full triangulated wireframe edges for 3D mesh ("maillage") visibility
-              edgeLinePositions.push(
-                vA.x, vA.y, vA.z, vB.x, vB.y, vB.z,
-                vB.x, vB.y, vB.z, vC.x, vC.y, vC.z,
-                vC.x, vC.y, vC.z, vA.x, vA.y, vA.z
-              );
+              // 2. Subdivide structural mesh edges into discrete screen points so long ribs & frames read as dotted point-lines
+              sampleEdgePoints(vA, vB, 0.14, zoneTag);
+              sampleEdgePoints(vB, vC, 0.14, zoneTag);
+              sampleEdgePoints(vC, vA, 0.14, zoneTag);
             }
           }
         });
 
-        const SHIP_PT_COUNT = 24000;
-        const shipPtPos = new Float32Array(SHIP_PT_COUNT * 3);
+        const SHIP_PT_COUNT = meshPointZones.length;
+        const shipPtPos = new Float32Array(meshPointCoords);
         const shipPtMeta = new Float32Array(SHIP_PT_COUNT * 2); // [zoneTag, randomSeed]
 
-        // Sample vertices evenly across all collected triangles of the ship for crisp corners & edges
-        let ptIdx = 0;
-        const stride = Math.max(1, Math.floor(collectedTris.length / 2200));
-        for (let i = 0; i < collectedTris.length && ptIdx < 6600; i += stride) {
-          const tr = collectedTris[i];
-          const verts = [
-            [tr.ax, tr.ay, tr.az],
-            [tr.bx, tr.by, tr.bz],
-            [tr.cx, tr.cy, tr.cz]
-          ];
-          for (let k = 0; k < 3 && ptIdx < 6600; k++) {
-            shipPtPos[ptIdx * 3]     = verts[k][0];
-            shipPtPos[ptIdx * 3 + 1] = verts[k][1];
-            shipPtPos[ptIdx * 3 + 2] = verts[k][2];
-            shipPtMeta[ptIdx * 2]     = tr.zone;
-            shipPtMeta[ptIdx * 2 + 1] = ((ptIdx * 16807) % 2147483647) / 2147483647;
-            ptIdx++;
-          }
-        }
-
-        // Fill remaining points via area-weighted surface + edge sampling across the entire ship
-        for (; ptIdx < SHIP_PT_COUNT; ptIdx++) {
-          const rArea = Math.random() * totalArea;
-          let lo = 0, hi = collectedTris.length - 1;
-          while (lo < hi) {
-            const mid = (lo + hi) >> 1;
-            if (collectedTris[mid].cumArea < rArea) lo = mid + 1;
-            else hi = mid;
-          }
-          const tr = collectedTris[lo];
-          // 35% edge-biased points for razor-sharp naval lines, 65% surface fill
-          let u = Math.random();
-          let v = Math.random();
-          if (ptIdx % 3 === 0) {
-            v = 0.0; // Lock onto structural edge
-          } else if (u + v > 1.0) {
-            u = 1.0 - u;
-            v = 1.0 - v;
-          }
-          const w = 1.0 - u - v;
-          shipPtPos[ptIdx * 3]     = tr.ax * w + tr.bx * u + tr.cx * v;
-          shipPtPos[ptIdx * 3 + 1] = tr.ay * w + tr.by * u + tr.cy * v;
-          shipPtPos[ptIdx * 3 + 2] = tr.az * w + tr.bz * u + tr.cz * v;
-          shipPtMeta[ptIdx * 2]     = tr.zone;
-          shipPtMeta[ptIdx * 2 + 1] = ((ptIdx * 48271) % 2147483647) / 2147483647;
+        for (let i = 0; i < SHIP_PT_COUNT; i++) {
+          shipPtMeta[i * 2]     = meshPointZones[i];
+          shipPtMeta[i * 2 + 1] = ((i * 16807) % 2147483647) / 2147483647;
         }
 
         const shipPointGeo = new THREE.BufferGeometry();
@@ -3087,15 +3172,12 @@
           uniform float uDofEnabled;
           uniform float uFocusDistance;
           uniform float uFocalRange;
-          uniform float uAperture;
           uniform float uFocusPeaking;
 
           attribute vec2 aMeta;
 
           varying vec3 vColor;
           varying float vAlpha;
-          varying float vCoC;
-          varying float vInFocusBand;
 
           const float PI = 3.141592653589793;
 
@@ -3103,14 +3185,11 @@
             float zone = aMeta.x;
             float rnd = aMeta.y;
 
-            // Local 3D position on OPV 58S WALO
+            // Exact 3D mesh vertex position on OPV 58S WALO
             vec3 shipPos = position;
+            float scanWave = sin(shipPos.x * 1.4 - uTime * 3.6 + shipPos.y * 0.9);
 
-            // Subtle holographic breathing micro-pulse along hull frames
-            float scanWave = sin(shipPos.x * 1.4 - uTime * 3.8 + shipPos.y * 0.9);
-            shipPos += normalize(vec3(0.0, 0.25, shipPos.z + 0.001)) * (scanWave * 0.014 * uShipPointOpacity);
-
-            // When folding into Stage 3 (Tube) & Stage 4 (Torus), morph ship points into the inner quantum stream
+            // When folding into Stage 3 (Tube) & Stage 4 (Torus), morph ship mesh points into the inner quantum stream
             float uNorm = clamp((position.x + 9.1) / 18.2, 0.0, 1.0);
             float vNorm = fract(rnd + (position.y + 1.0) * 0.11);
             float theta = (vNorm - 0.5) * 2.0 * PI + uTime * 0.65;
@@ -3150,66 +3229,78 @@
             vec3 morphedPos = mix(shipPos, tubeCorePos, curlT);
             morphedPos = mix(morphedPos, tiltedTorus, bendT);
 
-            // Color Palette matching Ocean Mood + High-Contrast Naval Technical Highlights
-            vec3 colHullCyan = vec3(0.18, 0.85, 1.00);
-            vec3 colSuperBlue = vec3(0.48, 0.72, 1.00);
-            vec3 colAccentGold = vec3(1.00, 0.68, 0.24);
-            vec3 colSensorWhite = vec3(0.92, 0.98, 1.00);
+            // High-Contrast Naval Mesh Point Colors matching Ocean Mood
+            vec3 colHullCyan = vec3(0.22, 0.90, 1.00);
+            vec3 colSuperBlue = vec3(0.62, 0.86, 1.00);
+            vec3 colAccentGold = vec3(1.00, 0.78, 0.30);
+            vec3 colSensorWhite = vec3(0.96, 0.99, 1.00);
 
             if (uMoodPalette > 0.5 && uMoodPalette < 1.5) {
-              colHullCyan = vec3(0.12, 0.98, 0.76);
-              colSuperBlue = vec3(0.35, 0.92, 0.95);
-              colAccentGold = vec3(0.65, 1.00, 0.45);
+              colHullCyan = vec3(0.16, 1.00, 0.80);
+              colSuperBlue = vec3(0.45, 0.96, 0.98);
+              colAccentGold = vec3(0.72, 1.00, 0.52);
             } else if (uMoodPalette >= 1.5 && uMoodPalette < 2.5) {
-              colHullCyan = vec3(1.00, 0.48, 0.18);
-              colSuperBlue = vec3(1.00, 0.72, 0.32);
-              colAccentGold = vec3(1.00, 0.92, 0.55);
+              colHullCyan = vec3(1.00, 0.55, 0.22);
+              colSuperBlue = vec3(1.00, 0.78, 0.38);
+              colAccentGold = vec3(1.00, 0.95, 0.62);
             } else if (uMoodPalette >= 2.5) {
-              colHullCyan = vec3(0.76, 0.36, 1.00);
-              colSuperBlue = vec3(0.95, 0.45, 0.88);
-              colAccentGold = vec3(0.45, 0.88, 1.00);
+              colHullCyan = vec3(0.82, 0.44, 1.00);
+              colSuperBlue = vec3(0.98, 0.56, 0.92);
+              colAccentGold = vec3(0.52, 0.92, 1.00);
             }
 
             float heightFactor = clamp((position.y + 0.5) / 8.5, 0.0, 1.0);
             vec3 ptColor = mix(colHullCyan, colSuperBlue, smoothstep(0.15, 0.55, heightFactor));
-            ptColor = mix(ptColor, colAccentGold, smoothstep(0.50, 0.92, zone));
-            ptColor = mix(ptColor, colSensorWhite, smoothstep(0.75, 1.0, heightFactor) * 0.65);
-            ptColor += colSensorWhite * smoothstep(0.88, 0.99, scanWave) * 0.45;
-            ptColor *= uGlowBoost * 1.15;
+            ptColor = mix(ptColor, colAccentGold, smoothstep(0.55, 0.92, zone));
+            ptColor = mix(ptColor, colSensorWhite, smoothstep(0.72, 1.0, heightFactor) * 0.65);
+            ptColor += colSensorWhite * smoothstep(0.86, 0.99, scanWave) * 0.38;
+            ptColor *= (0.85 + uGlowBoost * 0.28);
 
             vec4 mvPosition = modelViewMatrix * vec4(morphedPos, 1.0);
             gl_Position = projectionMatrix * mvPosition;
 
             float viewZ = max(1.0, -mvPosition.z);
             float distFromFocus = abs(viewZ - uFocusDistance);
-            float defocusDistance = max(0.0, distFromFocus - uFocalRange);
-
-            float rawCoC = (defocusDistance / 18.0) * uAperture * uDofEnabled;
-            vCoC = clamp(rawCoC, 0.0, 1.0);
-
-            vInFocusBand = (1.0 - smoothstep(0.0, max(0.9, uFocalRange * 0.55), distFromFocus)) * uFocusPeaking * uDofEnabled;
+            float inFocusBand = (1.0 - smoothstep(0.0, max(0.9, uFocalRange * 0.55), distFromFocus)) * uFocusPeaking * uDofEnabled;
             vec3 peakingColor = vec3(0.35, 1.0, 0.78);
-            vColor = mix(ptColor, peakingColor * 1.45, vInFocusBand * 0.78);
+            vColor = mix(ptColor, peakingColor * 1.35, inFocusBand * 0.75);
 
-            float basePtSize = 0.82 + zone * 0.55 + rnd * 0.35;
-            float sharpSize = (46.0 / viewZ) * uPixelRatio * basePtSize;
-            float bokehExpansion = 1.0 + vCoC * vCoC * 5.8 + vCoC * 1.9;
-            gl_PointSize = clamp(sharpSize * bokehExpansion, 1.35, 76.0 * uPixelRatio);
+            // Crisp screen-space point size (2.2px to 4.2px on screen, never blown out into blurry bokeh blobs)
+            float basePtSize = 0.85 + zone * 0.32;
+            float screenPx = clamp((48.0 / pow(max(5.0, viewZ), 0.72)) * basePtSize, 2.1, 4.2);
+            gl_PointSize = screenPx * uPixelRatio;
 
-            float energyConservation = 1.0 / (1.0 + vCoC * 3.2 + vCoC * vCoC * 3.5);
-            vAlpha = uShipPointOpacity * energyConservation * (0.78 + 0.22 * sin(uTime * 3.4 + rnd * 6.283));
+            vAlpha = uShipPointOpacity * (0.88 + 0.12 * sin(uTime * 3.0 + rnd * 6.283));
           }
         `;
 
-        uniforms.uShipPointOpacity = { value: 0.12 };
+        const shipPointFragmentShader = `
+          varying vec3 vColor;
+          varying float vAlpha;
+
+          void main() {
+            if (vAlpha <= 0.01) discard;
+            vec2 uv = gl_PointCoord.xy - vec2(0.5);
+            float r = length(uv) * 2.0;
+            if (r > 1.0) discard;
+
+            // Sharp circular screen-space point with crisp anti-aliased rim and bright center
+            float dotMask = smoothstep(1.0, 0.42, r);
+            float coreBoost = smoothstep(0.52, 0.0, r) * 0.35;
+            gl_FragColor = vec4(vColor + vec3(coreBoost), dotMask * vAlpha);
+          }
+        `;
+
+        uniforms.uShipPointOpacity = { value: 1.0 };
 
         const shipPointMat = new THREE.ShaderMaterial({
           vertexShader: shipPointVertexShader,
-          fragmentShader: particleFragmentShader,
+          fragmentShader: shipPointFragmentShader,
           uniforms: uniforms,
           transparent: true,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending
+          depthTest: true,
+          depthWrite: true,
+          blending: THREE.NormalBlending
         });
 
         const shipPointCloud = new THREE.Points(shipPointGeo, shipPointMat);
@@ -3217,21 +3308,7 @@
         shipPointCloud.renderOrder = 3;
         shipGroup.add(shipPointCloud);
 
-        // Holographic Structural Wireframe Overlay ("Maillage 3D") on the Ship
-        const wireGeo = new THREE.BufferGeometry();
-        wireGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgeLinePositions, 3));
-        const wireMat = new THREE.LineBasicMaterial({
-          color: 0x38bdf8,
-          transparent: true,
-          opacity: 0.18,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending
-        });
-        const shipWireframe = new THREE.LineSegments(wireGeo, wireMat);
-        shipWireframe.renderOrder = 2;
-        shipGroup.add(shipWireframe);
-
-        // Collect all solid meshes (excluding point cloud, wireframe & bow spray) so we can cross-fade them cleanly
+        // Collect all solid meshes (excluding point cloud & bow spray) so they act as a stealth depth-occlusion core in Stage 1
         const solidMeshes = [];
         shipGroup.traverse((ch) => {
           if (ch.isMesh) {
@@ -3244,8 +3321,7 @@
           group: shipGroup,
           solidMeshes,
           shipPointCloud,
-          shipWireframe,
-          wireMat,
+          shipPointMat,
           radarSpinner,
           flagMesh,
           sprayPoints,
@@ -3256,37 +3332,94 @@
       }
 
       const waloShip = createOPV58Walo();
-      // Place OPV 58S WALO in the foreground/midground angled like the reference photo
-      const shipBaseX = 4.2;
-      const shipBaseZ = 8.8;
+      // Configurable Vessel Distance from Camera (default 20.0m -> Z = 29.0 - 20.0 = 9.0)
+      let userShipDistance = 20.0;
+      let smoothShipDistance = 20.0;
       const shipHeading = -0.36; // Angled toward starboard bow
-      waloShip.group.position.set(shipBaseX, 0, shipBaseZ);
+      waloShip.group.position.set(4.2, 0, 9.0);
       waloShip.group.rotation.y = shipHeading;
       scene.add(waloShip.group);
 
-      // JavaScript mirror of the 5-wave Gerstner + Shockwave function for exact ship buoyancy
+      // JavaScript mirror of the 10-wave + 4-octave FBM stochastic wave engine for exact ship buoyancy
+      function waveHash21JS(px, pz) {
+        let x = (px * 123.34) % 1; if (x < 0) x += 1;
+        let y = (pz * 456.21) % 1; if (y < 0) y += 1;
+        const d = x * (x + 45.32) + y * (y + 45.32);
+        x += d; y += d;
+        let f = (x * y) % 1;
+        return f < 0 ? f + 1 : f;
+      }
+
+      function waveNoise2DJS(x, z) {
+        const ix = Math.floor(x), iz = Math.floor(z);
+        const fx = x - ix, fz = z - iz;
+        const ux = fx * fx * fx * (fx * (fx * 6.0 - 15.0) + 10.0);
+        const uz = fz * fz * fz * (fz * (fz * 6.0 - 15.0) + 10.0);
+        const a = waveHash21JS(ix, iz);
+        const b = waveHash21JS(ix + 1, iz);
+        const c = waveHash21JS(ix, iz + 1);
+        const d = waveHash21JS(ix + 1, iz + 1);
+        const val = a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz;
+        return val * 2.0 - 1.0;
+      }
+
       function sampleGerstnerHeightJS(px, pz, time, ampScale, shockCenter, shockTime) {
         const waves = [
-          [0.88, 0.47, 0.26, 26.0],
-          [-0.62, 0.78, 0.22, 17.5],
-          [0.32, -0.94, 0.18, 11.2],
-          [-0.91, -0.41, 0.15, 6.8],
-          [0.74, -0.67, 0.12, 4.1]
+          [ 0.88,  0.47, 0.21, 33.7],
+          [-0.62,  0.78, 0.18, 22.9],
+          [ 0.31, -0.95, 0.16, 16.3],
+          [-0.92, -0.39, 0.14, 11.8],
+          [ 0.73, -0.68, 0.13,  8.7],
+          [-0.24,  0.97, 0.11,  6.4],
+          [ 0.96, -0.28, 0.10,  4.9],
+          [-0.79, -0.61, 0.09,  3.7],
+          [ 0.48,  0.88, 0.08,  2.8],
+          [-0.41, -0.91, 0.07,  2.1]
         ];
+        const chaos = Math.max(0.15, uniforms.uWaveChaos.value);
+        const clampChaos = Math.min(1.25, Math.max(0.0, chaos * 0.72));
         let y = 0.0;
-        for (let i = 0; i < 5; i++) {
+
+        for (let i = 0; i < 10; i++) {
           let dx = waves[i][0], dz = waves[i][1];
           const len = Math.hypot(dx, dz);
           dx /= len; dz /= len;
-          const steepness = waves[i][2] * ampScale;
+          const perpx = -dz, perpz = dx;
+
+          const gx = (perpx * px + perpz * pz) * (0.026 + i * 0.0035) + i * 4.17;
+          const gz = (dx * px + dz * pz) * (0.017 + i * 0.0022) - time * (0.16 + i * 0.02);
+          const envN = waveNoise2DJS(gx, gz);
+          const bendN = waveNoise2DJS(gz * 1.37 + i * 9.31, gx * 1.37 + time * 0.11);
+
+          const envClamped = Math.min(1.58, Math.max(0.12, 0.62 + 0.68 * envN));
+          const packetEnvelope = 1.0 + (envClamped - 1.0) * clampChaos;
+          const steepness = waves[i][2] * ampScale * packetEnvelope;
           const wl = waves[i][3];
           const k = 6.2831853 / wl;
-          const c = Math.sqrt(9.8 / k);
-          const f = k * ((dx * px + dz * pz) - c * time * 1.15);
+          const fractSin = ((Math.sin(i * 37.1) * 437.5) % 1 + 1) % 1;
+          const c = Math.sqrt(9.8 / k) * (0.92 + 0.16 * fractSin);
+          const phaseWarp = bendN * 1.65 * chaos;
+          const f = k * ((dx * px + dz * pz) - c * time * 1.12) + phaseWarp + i * 2.39996;
           const a = steepness / k;
           y += a * Math.sin(f);
         }
-        y += Math.sin(px * 0.65 + time * 2.2) * Math.cos(pz * 0.65 - time * 1.8) * 0.18 * ampScale;
+
+        // 4-octave FBM Chop matching GLSL
+        let pCx = px * 0.055, pCz = pz * 0.055;
+        let octAmp = 0.58 * ampScale * chaos;
+        for (let oct = 0; oct < 4; oct++) {
+          const wx = time * (0.48 + oct * 0.27);
+          const wz = -time * (0.39 - oct * 0.19);
+          const n = waveNoise2DJS(pCx + wx, pCz + wz);
+          const ridge = 1.0 - Math.abs(n);
+          const sharpRidge = ridge * ridge - 0.45;
+          const weight = n * 0.48 + sharpRidge * 0.52;
+          y += weight * octAmp;
+          const nx = (0.80 * pCx + 0.60 * pCz) * 2.13 + 17.3;
+          const nz = (-0.60 * pCx + 0.80 * pCz) * 2.13 - 11.7;
+          pCx = nx; pCz = nz;
+          octAmp *= 0.47;
+        }
 
         if (shockTime > 0.01 && shockTime < 6.5) {
           const dWave = Math.hypot(px - shockCenter.x, pz - shockCenter.y);
@@ -3305,9 +3438,13 @@
       let manualOverride = false;
 
       const sliderMorph = document.getElementById('slider-morph');
+      const sliderShipDist = document.getElementById('slider-ship-dist');
       const sliderWave = document.getElementById('slider-wave');
+      const sliderWaveChaos = document.getElementById('slider-wave-chaos');
       const sliderGlow = document.getElementById('slider-glow');
+      const valShipDist = document.getElementById('val-ship-dist');
       const valWave = document.getElementById('val-wave');
+      const valWaveChaos = document.getElementById('val-wave-chaos');
       const valGlow = document.getElementById('val-glow');
       const hudPercent = document.getElementById('hud-percent');
       const morphStageLabel = document.getElementById('morph-stage-label');
@@ -3337,7 +3474,7 @@
       window.addEventListener('scroll', updateScrollProgress, { passive: true });
       updateScrollProgress();
 
-      // Geometry Sliders
+      // Geometry, Vessel Distance & Wave Sliders
       sliderMorph.addEventListener('input', (e) => {
         manualOverride = true;
         targetProgress = parseFloat(e.target.value);
@@ -3346,11 +3483,30 @@
         setTimeout(() => { manualOverride = false; }, 150);
       });
 
+      if (sliderShipDist) {
+        sliderShipDist.addEventListener('input', (e) => {
+          const dist = parseFloat(e.target.value);
+          userShipDistance = dist;
+          if (valShipDist) valShipDist.textContent = dist.toFixed(1) + ' m';
+          // Automatically adjust focus distance to keep the vessel sharp when moving it
+          targetFocusDistance = Math.min(85.0, Math.max(6.0, dist));
+          updateOpticsSummaryHUD();
+        });
+      }
+
       sliderWave.addEventListener('input', (e) => {
         const v = parseFloat(e.target.value);
         uniforms.uWaveAmp.value = v;
         valWave.textContent = v.toFixed(2) + '×';
       });
+
+      if (sliderWaveChaos) {
+        sliderWaveChaos.addEventListener('input', (e) => {
+          const v = parseFloat(e.target.value);
+          uniforms.uWaveChaos.value = v;
+          if (valWaveChaos) valWaveChaos.textContent = v.toFixed(2) + '×';
+        });
+      }
 
       sliderGlow.addEventListener('input', (e) => {
         const v = parseFloat(e.target.value);
@@ -3676,31 +3832,29 @@
         uniforms.uOceanOpacity.value = oceanFadeOut;
         oceanMesh.visible = oceanFadeOut > 0.005;
 
-        // Update OPV 58S WALO Solid-to-Point-Mesh Metamorphosis, Buoyancy, Radar & Bow Spray
-        const solidShipOpacity = 1.0 - smoothstep(0.20, 0.38, p);
-        const shipPointsFadeIn = smoothstep(0.06, 0.25, p);
-        uniforms.uShipPointOpacity.value = 0.24 + shipPointsFadeIn * 0.76;
+        // Update OPV 58S WALO Screen-Space Point-Mesh, Configurable Vessel Distance & Buoyancy
+        const solidShipOpacity = (1.0 - smoothstep(0.20, 0.38, p)) * 0.92;
+        uniforms.uShipPointOpacity.value = 1.0;
 
-        // Cross-fade solid PBR hull into the 24,000-point 3D Point Mesh + Holographic Wireframe
+        // Solid hull provides stealth depth occlusion behind the crisp screen-space mesh points in Stage 1
         const showSolidHull = solidShipOpacity > 0.01;
         for (let m = 0; m < waloShip.solidMaterials.length; m++) {
           waloShip.solidMaterials[m].opacity = solidShipOpacity;
-          waloShip.solidMaterials[m].depthWrite = solidShipOpacity > 0.25;
+          waloShip.solidMaterials[m].depthWrite = solidShipOpacity > 0.20;
         }
         for (let i = 0; i < waloShip.solidMeshes.length; i++) {
           waloShip.solidMeshes[i].visible = showSolidHull;
         }
 
-        // Visible 3D Wireframe Mesh ("Maillage") in Stage 1 (0.18), intensifying in Stage 2 (0.58), fading into Tube
-        const wireFadeOutToTube = 1.0 - smoothstep(0.45, 0.62, p);
-        const wireGlow = (0.18 + Math.max(lockOnBell * 0.42, smoothstep(0.10, 0.28, p) * 0.40)) * wireFadeOutToTube;
-        waloShip.wireMat.opacity = wireGlow;
-        waloShip.shipWireframe.visible = wireGlow > 0.005;
-
         const waveAmp = uniforms.uWaveAmp.value;
         const sTime = uniforms.uShockwaveTime.value;
         const sCenter = uniforms.uShockwaveCenter.value;
         const shipOnWaterFactor = 1.0 - smoothstep(0.45, 0.68, p);
+
+        // Smoothly interpolate user-selected vessel distance from camera (10m to 110m)
+        smoothShipDistance += (userShipDistance - smoothShipDistance) * 0.12;
+        const shipBaseX = 4.2 * (0.55 + 0.45 * (smoothShipDistance / 20.0));
+        const shipBaseZ = 29.0 - smoothShipDistance;
 
         // Subtle forward headway & yaw sway on the swell (centres smoothly when morphing into Tube/Torus)
         const curShipX = (shipBaseX + Math.sin(elapsedTime * 0.35) * 0.65) * shipOnWaterFactor;
