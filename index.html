@@ -528,8 +528,8 @@
           <div class="pt-1">
             <div class="text-[10px] text-white/50 uppercase tracking-wider mb-1.5" data-i18n="cam_presets">Cadrages Cinématiques</div>
             <div class="grid grid-cols-3 gap-1.5">
-              <button onclick="applyCameraPreset('walo')" class="py-1.5 px-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-400/40 text-[10px] font-mono-tech text-cyan-200 transition cursor-pointer text-center" data-i18n="preset_walo">
-                ⚓ OPV 58 WALO
+              <button onclick="applyCameraPreset('opv')" class="py-1.5 px-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/35 border border-cyan-400/40 text-[10px] font-mono-tech text-cyan-200 transition cursor-pointer text-center" data-i18n="preset_opv">
+                ⚓ OPV
               </button>
               <button onclick="applyCameraPreset('grazing')" class="py-1.5 px-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/20 border border-white/10 text-[10px] font-mono-tech text-white/85 transition cursor-pointer text-center" data-i18n="preset_grazing">
                 Ras de l'eau
@@ -874,7 +874,7 @@
         cam_roll: "Roulis (Roll)",
         cam_fov_label: "Focale Objectif (FOV)",
         cam_presets: "Cadrages Cinématiques",
-        preset_walo: "⚓ OPV 58 WALO",
+        preset_opv: "⚓ OPV",
         preset_grazing: "Ras de l'eau",
         preset_horizon: "Horizon",
         preset_high: "Plongée",
@@ -954,7 +954,7 @@
         cam_roll: "Camera Roll Angle",
         cam_fov_label: "Lens Focal Length (FOV)",
         cam_presets: "Cinematic Camera Presets",
-        preset_walo: "⚓ OPV 58 WALO",
+        preset_opv: "⚓ OPV",
         preset_grazing: "Water Grazing",
         preset_horizon: "Horizon",
         preset_high: "High Angle",
@@ -1455,7 +1455,7 @@
         vec3 foamColor = vec3(0.78, 0.94, 1.0) * clamp(lightScale, 0.25, 1.8);
         color = mix(color, foamColor, foamMask * (0.65 - coc * 0.3));
 
-        // OPV 58S WALO Kelvin Bow Wave, Hull Foam & Stern Propeller Wake
+        // OPV Kelvin Bow Wave, Hull Foam & Stern Propeller Wake
         vec2 relShip = vWorldPos.xz - uShipPos;
         float ch = cos(uShipHeading);
         float sh = sin(uShipHeading);
@@ -1909,8 +1909,8 @@
 
     function applyCameraPreset(presetName) {
       setCameraMode('manual');
-      if (presetName === 'walo') {
-        // Dramatic 3/4 Starboard Bow view of OPV 58S WALO (matching reference photo)
+      if (presetName === 'opv') {
+        // Dramatic 3/4 Starboard Bow view of OPV
         jumpToStage(0);
         userCamHeight = 5.4;
         userCamPitch = -9.5;
@@ -2204,7 +2204,7 @@
       const starField = new THREE.Points(starGeo, starMat);
       scene.add(starField);
 
-      // OBJECT 4: OPV 58S "WALO" OFFSHORE PATROL VESSEL (3D REPLICA FROM REFERENCE PHOTO)
+      // OBJECT 4: OPV OFFSHORE PATROL VESSEL
       const hemiLight = new THREE.HemisphereLight(0xa5d8ff, 0x07192e, 1.35);
       scene.add(hemiLight);
 
@@ -2216,7 +2216,7 @@
       rimLight.position.set(-32, 18, -28);
       scene.add(rimLight);
 
-      function createWaloNameplateTexture() {
+      function createOPVNameplateTexture() {
         const c = document.createElement('canvas');
         c.width = 512;
         c.height = 128;
@@ -2226,7 +2226,7 @@
         ctx.fillStyle = '#181e26';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('WALO', 256, 64);
+        ctx.fillText('OPV', 256, 64);
         return new THREE.CanvasTexture(c);
       }
 
@@ -2260,7 +2260,7 @@
         return tex;
       }
 
-      function createOPV58Walo() {
+      function createOPV() {
         const shipGroup = new THREE.Group();
         const platingBump = createHullPlatingTexture();
 
@@ -2328,7 +2328,7 @@
         // =====================================================================
         const NUM_X = 96;
         const NUM_V = 26;
-        const L_HALF = 9.1; // Total length 18.2m (representing 58m OPV)
+        const L_HALF = 9.1; // Total length 18.2m (representing OPV)
 
         function evalHullProfile(u) {
           // u in [0 (stern -9.1) .. 1 (bow +9.1)]
@@ -2506,9 +2506,9 @@
         shipGroup.add(new THREE.Mesh(chineTubeR, matSuperLight));
         shipGroup.add(new THREE.Mesh(chineTubeL, matSuperLight));
 
-        // "WALO" Nameplate on Starboard & Port Stern Quarter
-        const waloTex = createWaloNameplateTexture();
-        const nameMat = new THREE.MeshBasicMaterial({ map: waloTex, transparent: true });
+        // "OPV" Nameplate on Starboard & Port Stern Quarter
+        const opvTex = createOPVNameplateTexture();
+        const nameMat = new THREE.MeshBasicMaterial({ map: opvTex, transparent: true });
         [1, -1].forEach((side) => {
           const stName = evalHullProfile(0.13);
           const namePlane = new THREE.Mesh(new THREE.PlaneGeometry(1.75, 0.44), nameMat);
@@ -3100,7 +3100,7 @@
         shipGroup.add(sprayPoints);
 
         // 8. GENERATE STRUCTURED 3D POINT-MESH ("POINTS DE MAILLAGE À L'ÉCRAN") OF THE SHIP
-        // Every mesh vertex & structural rib of OPV 58S WALO is rendered as a crisp screen-space point (no LineSegments lines)
+        // Every mesh vertex & structural rib of OPV is rendered as a crisp screen-space point (no LineSegments lines)
         shipGroup.updateMatrixWorld(true);
         const invGroupMat = new THREE.Matrix4().copy(shipGroup.matrixWorld).invert();
 
@@ -3214,7 +3214,7 @@
             float zone = aMeta.x;
             float rnd = aMeta.y;
 
-            // Exact 3D mesh vertex position on OPV 58S WALO
+            // Exact 3D mesh vertex position on OPV
             vec3 shipPos = position;
             float scanWave = sin(shipPos.x * 1.4 - uTime * 3.6 + shipPos.y * 0.9);
 
@@ -3360,14 +3360,14 @@
         };
       }
 
-      const waloShip = createOPV58Walo();
+      const opvShip = createOPV();
       // Configurable Vessel Distance from Camera (default 20.0m -> Z = 29.0 - 20.0 = 9.0)
       let userShipDistance = 20.0;
       let smoothShipDistance = 20.0;
       const shipHeading = -0.36; // Angled toward starboard bow
-      waloShip.group.position.set(4.2, 0, 9.0);
-      waloShip.group.rotation.y = shipHeading;
-      scene.add(waloShip.group);
+      opvShip.group.position.set(4.2, 0, 9.0);
+      opvShip.group.rotation.y = shipHeading;
+      scene.add(opvShip.group);
 
       // JavaScript mirror of the 10-wave + 4-octave FBM stochastic wave engine for exact ship buoyancy
       function waveHash21JS(px, pz) {
@@ -3866,19 +3866,19 @@
         uniforms.uOceanOpacity.value = oceanFadeOut;
         oceanMesh.visible = oceanFadeOut > 0.005;
 
-        // Update OPV 58S WALO: Initial 3D PBR Hull in Stage 1 -> Screen-Space Point-Mesh from Stage 2+
+        // Update OPV: Initial 3D PBR Hull in Stage 1 -> Screen-Space Point-Mesh from Stage 2+
         const solidShipOpacity = 1.0 - smoothstep(0.22, 0.40, p);
         const shipPointsFadeIn = smoothstep(0.10, 0.28, p);
         uniforms.uShipPointOpacity.value = shipPointsFadeIn;
-        waloShip.shipPointCloud.visible = shipPointsFadeIn > 0.005;
+        opvShip.shipPointCloud.visible = shipPointsFadeIn > 0.005;
 
         const showSolidHull = solidShipOpacity > 0.01;
-        for (let m = 0; m < waloShip.solidMaterials.length; m++) {
-          waloShip.solidMaterials[m].opacity = solidShipOpacity;
-          waloShip.solidMaterials[m].depthWrite = solidShipOpacity > 0.20;
+        for (let m = 0; m < opvShip.solidMaterials.length; m++) {
+          opvShip.solidMaterials[m].opacity = solidShipOpacity;
+          opvShip.solidMaterials[m].depthWrite = solidShipOpacity > 0.20;
         }
-        for (let i = 0; i < waloShip.solidMeshes.length; i++) {
-          waloShip.solidMeshes[i].visible = showSolidHull;
+        for (let i = 0; i < opvShip.solidMeshes.length; i++) {
+          opvShip.solidMeshes[i].visible = showSolidHull;
         }
 
         const waveAmp = uniforms.uWaveAmp.value;
@@ -3913,23 +3913,23 @@
         const targetPitch = Math.atan2(yBow - yStern, 13.0) * 0.68 * shipOnWaterFactor;
         const targetRoll  = Math.atan2(yPort - yStb, 2.8) * 0.55 * shipOnWaterFactor;
 
-        waloShip.group.position.x = curShipX;
-        waloShip.group.position.z = curShipZ;
-        waloShip.group.position.y += (targetHeave - waloShip.group.position.y) * 0.14;
-        waloShip.group.rotation.y = curHeading;
-        waloShip.group.rotation.z += (targetPitch - waloShip.group.rotation.z) * 0.12;
-        waloShip.group.rotation.x += (targetRoll - waloShip.group.rotation.x) * 0.12;
+        opvShip.group.position.x = curShipX;
+        opvShip.group.position.z = curShipZ;
+        opvShip.group.position.y += (targetHeave - opvShip.group.position.y) * 0.14;
+        opvShip.group.rotation.y = curHeading;
+        opvShip.group.rotation.z += (targetPitch - opvShip.group.rotation.z) * 0.12;
+        opvShip.group.rotation.x += (targetRoll - opvShip.group.rotation.x) * 0.12;
 
         // Spin X-band Navigation Radar & flutter mast pennant
-        waloShip.radarSpinner.rotation.y = elapsedTime * 4.2;
-        waloShip.flagMesh.rotation.y = Math.sin(elapsedTime * 7.5) * 0.25;
+        opvShip.radarSpinner.rotation.y = elapsedTime * 4.2;
+        opvShip.flagMesh.rotation.y = Math.sin(elapsedTime * 7.5) * 0.25;
 
         // Animate 3D Bow Spray droplets while on the ocean (Stages 1 & 2)
-        waloShip.sprayPoints.visible = shipOnWaterFactor > 0.05;
-        if (waloShip.sprayPoints.visible) {
-          const spArr = waloShip.sprayPoints.geometry.attributes.position.array;
-          for (let i = 0; i < waloShip.sprayVels.length; i++) {
-            const sv = waloShip.sprayVels[i];
+        opvShip.sprayPoints.visible = shipOnWaterFactor > 0.05;
+        if (opvShip.sprayPoints.visible) {
+          const spArr = opvShip.sprayPoints.geometry.attributes.position.array;
+          for (let i = 0; i < opvShip.sprayVels.length; i++) {
+            const sv = opvShip.sprayVels[i];
             sv.life += 0.028;
             if (sv.life >= 1.0) {
               sv.life = 0.0;
@@ -3942,8 +3942,8 @@
               spArr[i * 3 + 2] += sv.vz * 0.032;
             }
           }
-          waloShip.sprayPoints.geometry.attributes.position.needsUpdate = true;
-          waloShip.sprayPoints.material.opacity = 0.76 * shipOnWaterFactor;
+          opvShip.sprayPoints.geometry.attributes.position.needsUpdate = true;
+          opvShip.sprayPoints.material.opacity = 0.76 * shipOnWaterFactor;
         }
 
         if (atmosphereOverlay) {
